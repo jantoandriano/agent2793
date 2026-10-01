@@ -36,6 +36,26 @@ providers/             how to load this into Kilo Code, Claude Code, Codex, othe
 
 The examples use Kilo Code, agent2793 at `D:/Projects/agent2793`, and an application at `D:/Projects/my-app`. Run commands in Git Bash (or any bash on macOS/Linux). Other tools: [`providers/`](providers/README.md).
 
+### Set up by chatting with the agent
+
+Instead of the manual steps below, open the project's main checkout in Kilo and send:
+
+```text
+Set up agent2793 in this project by following D:/Projects/agent2793/SETUP.md (section A).
+```
+
+The agent creates or merges `.kilo/kilo.jsonc`, adds `.work/local-files`, keeps both out of git, checks the validation commands, and reports what it changed. It asks before touching any committed file. Reload the window afterwards so the instructions load.
+
+To start a ticket from chat (in the main checkout):
+
+```text
+Start ticket HYP-123 "Add CSV export" with agent2793 (D:/Projects/agent2793/SETUP.md, section B).
+```
+
+The agent runs `start-ticket` and tells you which worktree to open; you then give the ticket to Kilo in that new window (step 3 below). To check readiness: `Check if ticket HYP-123 is ready (D:/Projects/agent2793/SETUP.md, section C).`
+
+[`SETUP.md`](SETUP.md) holds the agent's instructions for all three.
+
 ### Once per machine (optional)
 
 Put the scripts on your `PATH` (`~/.bashrc`) so you can type `start-ticket` instead of the full path:
