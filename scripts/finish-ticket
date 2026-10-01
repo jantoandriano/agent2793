@@ -307,7 +307,8 @@ Result: $verdict
 EOF
 
 if [[ "$verdict" == "READY_FOR_PR" ]]; then
-  echo "The agent may set ticket.status to READY_FOR_PR after completing the implementation report."
+  echo "The agent may set ticket.status to READY_FOR_PR after completing the implementation report,"
+  echo "then comments on the tracker ticket per tracker.comment in ticket.md (ticket/finish.md §4)."
   echo "Nothing was committed, pushed, or merged."
   exit 0
 fi

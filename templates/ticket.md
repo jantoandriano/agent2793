@@ -26,6 +26,10 @@ checkpoint:
   mode: auto                  # auto: wait only when a checkpoint trigger applies | always: always wait for plan approval
   plan_approved: false
 
+tracker:
+  comment: {{TRACKER_COMMENT}}   # ask: show the finish comment, post after approval | auto: post without asking | off: never post
+  comment_posted: ""          # date and link/ID of the posted comment
+
 validation:                   # pending | pass | fail | not-run | not-applicable
   typecheck: pending
   lint: pending

@@ -56,7 +56,7 @@ Lower in the list wins: more specific instructions override generic ones. Exampl
 2. Never run destructive commands (`rules/git.md`) without explicit human approval for that specific operation.
 3. Never claim validation, review, or completion you did not actually perform.
 4. Never expose, commit, or log secrets.
-5. Never push, merge, or open a PR unless explicitly asked.
+5. Never push, merge, open a PR, or post to external systems (issue tracker, chat) unless explicitly asked. One exception: the end-of-ticket tracker comment, governed by `tracker.comment` in `ticket.md`, which the human sets (`ticket/finish.md` §4).
 
 ## 4. Workspace model
 
@@ -106,7 +106,7 @@ Understand → Analyze → Plan → Implement → Validate → Review → Report
 | Implement | `ticket/implement.md` | `IN_PROGRESS` |
 | Validate | `ticket/validate.md` | `VALIDATING` |
 | Self-review | `ticket/review.md` | `REVIEWING` |
-| Report | `ticket/finish.md` | `READY_FOR_PR` |
+| Report + tracker comment | `ticket/finish.md` | `READY_FOR_PR` |
 
 Validation failures and review findings send you back to `IN_PROGRESS`. Type-specific guidance: `workflows/feature.md`, `workflows/bug-fix.md`, `workflows/refactor.md`, `workflows/investigation.md`. Full lifecycle: `workflows/ticket.md`.
 

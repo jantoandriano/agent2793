@@ -135,6 +135,7 @@ implement smallest correct change + tests; root-cause debugging; max 3 fix attem
 validate  the project's own typecheck / lint / tests / build
 review    self-review of the real git diff → fix findings → validate again
 report    implementation-report.md; status READY_FOR_PR or BLOCKED
+          → comment on the Jira ticket with what was done (asks you first by default)
 ```
 
 Everything is recorded in `.work/HYP-123/`: `ticket.md` (status), `analysis.md`, `dependency-analysis.md`, `plan.md`, `validation.md`, `review.md`, `implementation-report.md`. A new session can resume from these files.
@@ -165,6 +166,7 @@ Set `status: DONE` in `.work/HYP-123/ticket.md`; keep or archive the context dir
 - Each worktree needs its own dependency install (`pnpm install` or equivalent); the agent does this during analysis.
 - Editing `.kilo/kilo.jsonc` later does not update existing worktrees; new tickets get the new version. To refresh one, delete its copy and re-run `start-ticket` for that ticket.
 - On the first ticket, ask Kilo "Which instruction files are loaded?" to confirm it picked up `AGENTS.md`.
+- **Jira comment at the end.** When the ticket reaches `READY_FOR_PR`, the agent drafts a short comment (what was done, what was verified, what was not, follow-ups) from the implementation report and posts it to the Jira ticket with the Jira tool in its session (e.g. an Atlassian MCP server). By default it shows you the draft and posts after you approve. Set per ticket with `start-ticket HYP-123 --tracker-comment auto|ask|off`, or for all new tickets with `export EA_TRACKER_COMMENT=auto`. It only adds a comment — it never changes the Jira status or fields. Without a Jira tool, it gives you the text to paste (`.work/HYP-123/tracker-comment.md`).
 
 ### Without the scripts
 

@@ -22,6 +22,9 @@ Options:
                   Use another ticket's branch to build on its unmerged work.
   --branch NAME   branch name override
   --path DIR      worktree directory override
+  --tracker-comment MODE
+                  ask | auto | off — comment on the tracker ticket (e.g. Jira) when the ticket
+                  is finished (default: $EA_TRACKER_COMMENT, else ask). See ticket/finish.md.
   -h, --help      show this help
 
 Safe to re-run: existing worktree, ticket.md, and copied local files are kept, never overwritten.
@@ -29,10 +32,11 @@ Re-running also copies local files that are missing from the worktree.
 EOF
 }
 
-id="" title="TBD" type="feature" base="" branch="" path=""
+id="" title="TBD" type="feature" base="" branch="" path="" tracker_comment="${EA_TRACKER_COMMENT:-ask}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --title) title=${2:?--title needs a value}; shift 2 ;;
+    --tracker-comment) tracker_comment=${2:?--tracker-comment needs a value}; shift 2 ;;
     --type) type=${2:?--type needs a value}; shift 2 ;;
     --base) base=${2:?--base needs a value}; shift 2 ;;
     --branch) branch=${2:?--branch needs a value}; shift 2 ;;
@@ -43,6 +47,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n "$id" ]] || { usage >&2; exit 1; }
+
+case "$tracker_comment" in
+  ask | auto | off) ;;
+  *) ea_die "invalid --tracker-comment '$tracker_comment' (ask | auto | off)" ;;
+esac
 
 ea_require_git_repo
 ea_validate_ticket_id "$id"
@@ -71,6 +80,7 @@ else
   ea_render "$EA_HOME/templates/ticket.md" \
     "ID=$id" "TITLE=$yaml_title" "TYPE=$type" "BRANCH=$branch" "BASE=$base" \
     "WORKTREE=$path" "CONTEXT=$context" "EA_HOME=$EA_HOME" "DATE=$(date +%Y-%m-%d)" \
+    "TRACKER_COMMENT=$tracker_comment" \
     >"$context/ticket.md"
 fi
 

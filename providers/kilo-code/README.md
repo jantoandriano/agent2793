@@ -84,6 +84,10 @@ When the agent reports completion:
 /d/Projects/agent2793/scripts/finish-ticket HYP-123
 ```
 
+## Jira comment at the end of a ticket
+
+At finish, the agent comments on the Jira ticket (`ticket/finish.md` §4). In Kilo this uses an MCP server that can add Jira comments — e.g. Atlassian's, configured under `mcp` in `~/.config/kilo/kilo.jsonc`. The server must be connected and authorized in Kilo; if it is not, the agent gives you the comment text to paste instead. The default mode `ask` shows the draft first; Kilo's tool-approval settings may additionally ask before the MCP call.
+
 ## Agents (modes)
 
 | Phase | Kilo agent |

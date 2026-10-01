@@ -39,7 +39,7 @@ Ready for PR
 | Implementation | Smallest correct change, with tests | `ticket/implement.md` | Code + tests | `IN_PROGRESS` |
 | Validation | Prove it works with the project's own checks | `ticket/validate.md` | `validation.md` | `VALIDATING` |
 | Self review | Find problems in the real diff | `ticket/review.md` | `review.md` | `REVIEWING` |
-| Implementation report | Honest record: implemented, verified, not verified, issues, follow-ups | `ticket/finish.md` | `implementation-report.md` | `READY_FOR_PR` |
+| Implementation report | Honest record: implemented, verified, not verified, issues, follow-ups; comment on the tracker ticket | `ticket/finish.md` | `implementation-report.md`, tracker comment | `READY_FOR_PR` |
 
 Dependency analysis needs the file list from investigation, and investigation benefits from knowing related tickets; in practice both happen during the analyze phase and inform each other.
 
