@@ -35,6 +35,8 @@ ls "$main/.work/HYP-123/"
 ├── review.md                   self-review findings                             — ticket/review.md
 ├── implementation-report.md    final report                                     — ticket/finish.md
 └── logs/                       validation command output (finish-ticket)
+
+.work/local-files               optional: untracked files to copy into new worktrees (see below)
 ```
 
 Templates for these files are in `templates/`. `analysis.md` and `validation.md` formats are defined in `ticket/analyze.md` and `ticket/validate.md`.
@@ -74,6 +76,26 @@ Edit the header in place; keep it valid YAML. Append to Status History on every 
 | Own `.work/<ID>/` | read/write | read | read/write |
 | Main worktree code | read | read | read/write |
 | Shared git refs (branches, tags, stash) | own ticket branch only | — | all |
+
+## Local files copied into worktrees
+
+A new worktree contains only tracked files. Untracked local configuration in the main worktree — typically per-project AI tool settings that load Engineering Agent — would be missing, and the agent in the worktree would run without it.
+
+List such files in `<main worktree>/.work/local-files`, one repository-relative path per line (`#` comments allowed):
+
+```text
+# per-project AI tool config
+.kilo/kilo.jsonc
+```
+
+`scripts/start-ticket` copies each listed path (file or directory) into the new worktree. It:
+
+- skips paths tracked by git (the worktree already has them) and paths that do not exist
+- rejects absolute paths and paths containing `..`
+- never overwrites a file already present in the worktree; re-running `start-ticket` copies only what is missing
+- adds the path to `.git/info/exclude` if it is not already ignored, so it never shows in `git status` or a PR
+
+Copies are independent: later edits in the main worktree do not propagate to existing worktrees.
 
 ## Project validation override
 

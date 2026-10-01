@@ -11,7 +11,9 @@ Usage: start-ticket <TICKET-ID> [options]
   2. creates worktree ../worktrees/<TICKET-ID>    (via create-worktree)
   3. creates context directory .work/<TICKET-ID>/ in the main worktree
   4. creates .work/<TICKET-ID>/ticket.md from templates/ticket.md
-  5. prints the directory to open in your AI coding agent
+  5. copies untracked local files listed in .work/local-files into the worktree
+     (e.g. per-project AI tool config such as .kilo/kilo.jsonc)
+  6. prints the directory to open in your AI coding agent
 
 Options:
   --title TEXT    ticket title (default: TBD; the agent fills it in)
@@ -22,7 +24,8 @@ Options:
   --path DIR      worktree directory override
   -h, --help      show this help
 
-Safe to re-run: existing worktree and ticket.md are reused, never overwritten.
+Safe to re-run: existing worktree, ticket.md, and copied local files are kept, never overwritten.
+Re-running also copies local files that are missing from the worktree.
 EOF
 }
 
@@ -58,6 +61,7 @@ path=$(ea_abspath "$path")
 context="$main/.work/$id"
 mkdir -p "$context"
 ea_exclude_work_dir "$main"
+ea_copy_local_files "$main" "$path"
 
 if [[ -f "$context/ticket.md" ]]; then
   echo "Context exists: $context/ticket.md (kept)"

@@ -94,5 +94,6 @@ The scripts are conveniences. The contract is:
 1. a branch per ticket, checked out in its own worktree
 2. `<main worktree>/.work/<TICKET-ID>/ticket.md` created from `templates/ticket.md`
 3. `/.work/` excluded from git
+4. untracked local config the agent needs (listed in `.work/local-files`) present in the worktree — see `workspace/structure.md`
 
 Any tool or manual process that produces this layout works with the rest of Engineering Agent.

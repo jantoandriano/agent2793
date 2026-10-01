@@ -96,6 +96,41 @@ ea_exclude_work_dir() {
   grep -qxF '/.work/' "$exclude" 2>/dev/null || printf '/.work/\n' >>"$exclude"
 }
 
+# Copy untracked local files (e.g. per-project AI tool config) from the main worktree into a ticket
+# worktree. Paths come from <main>/.work/local-files, one repository-relative path per line.
+# Never overwrites, skips tracked paths (git already provides them), keeps copies out of git status.
+ea_copy_local_files() {
+  local main=$1 worktree=$2 list="$1/.work/local-files" rel common exclude
+  [[ -f "$list" ]] || return 0
+  common=$(git -C "$main" rev-parse --git-common-dir)
+  [[ "$common" = /* || "$common" =~ ^[A-Za-z]: ]] || common="$main/$common"
+  exclude="$common/info/exclude"
+  while IFS= read -r rel || [[ -n "$rel" ]]; do
+    rel=${rel%$'\r'}
+    [[ "$rel" =~ ^[[:space:]]*(#|$) ]] && continue
+    if [[ "$rel" = /* || "$rel" =~ ^[A-Za-z]: || "/$rel/" == */../* ]]; then
+      ea_warn "local-files: '$rel' must be a relative path inside the repository (skipped)"
+      continue
+    fi
+    if [[ ! -e "$main/$rel" ]]; then
+      ea_warn "local-files: '$rel' not found in $main (skipped)"
+      continue
+    fi
+    if [[ -n "$(git -C "$main" ls-files -- "$rel")" ]]; then
+      echo "Local file $rel is tracked by git; the worktree already has it (skipped)"
+      continue
+    fi
+    if [[ -e "$worktree/$rel" ]]; then
+      echo "Local file $rel already in worktree (kept)"
+      continue
+    fi
+    mkdir -p "$(dirname "$worktree/$rel")"
+    cp -R "$main/$rel" "$worktree/$rel"
+    git -C "$worktree" check-ignore -q -- "$rel" || printf '/%s\n' "$rel" >>"$exclude"
+    echo "Copied local file $rel"
+  done <"$list"
+}
+
 # Read a scalar field from the YAML header of ticket.md (first "  key: value" match), unquoted.
 ea_ticket_field() {
   local file=$1 key=$2

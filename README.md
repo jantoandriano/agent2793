@@ -43,15 +43,22 @@ export PATH="$HOME/.engineering-agent/scripts:$PATH"     # optional; Windows: us
 
 ### 2. Load the instructions into your AI coding tool (once)
 
-Make `AGENTS.md` part of your tool's global instructions. For Kilo Code:
+Make your tool load `AGENTS.md`, either globally or per project. For Kilo Code, per project and without committing anything — in the application repository's main checkout:
 
-```sh
-mkdir -p ~/.kilocode/rules
-ln -s ~/.engineering-agent/AGENTS.md ~/.kilocode/rules/engineering-agent.md
-echo "Engineering Agent root: $HOME/.engineering-agent" > ~/.kilocode/rules/engineering-agent-root.md
+```jsonc
+// .kilo/kilo.jsonc  (local, not committed)
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "instructions": ["/home/me/.engineering-agent/AGENTS.md"],
+  "permission": { "external_directory": "ask" }
+}
 ```
 
-Other tools: [`providers/`](providers/README.md). Your application repositories need no changes.
+```sh
+mkdir -p .work && echo ".kilo/kilo.jsonc" >> .work/local-files    # start-ticket copies it into every ticket worktree
+```
+
+Or load it globally via `~/.config/kilo/kilo.jsonc`. Details and other tools: [`providers/`](providers/README.md).
 
 ### 3. Create the ticket workspace and worktree
 
@@ -239,7 +246,7 @@ To control `finish-ticket` validation, commit `.engineering-agent/validation` (s
 | Script | Does |
 |---|---|
 | `create-worktree <ID>` | Creates or reuses branch `<prefix>/<ID>` and worktree `../worktrees/<ID>`; refuses if the branch is checked out elsewhere |
-| `start-ticket <ID>` | `create-worktree` + `.work/<ID>/ticket.md` + git exclude + list of other active tickets + what to open |
+| `start-ticket <ID>` | `create-worktree` + `.work/<ID>/ticket.md` + git exclude + copies files listed in `.work/local-files` + list of other active tickets + what to open |
 | `finish-ticket [ID]` | Git checks, detected validation, diff scan, `validation.md`, report draft, readiness verdict (exit 0 ready, 2 not ready) |
 
 All support `--help`. Bash; on Windows run them from Git Bash or WSL. They never commit, push, merge, or touch other tickets' worktrees.
