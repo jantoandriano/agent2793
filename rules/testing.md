@@ -27,7 +27,7 @@ Record the strategy in the plan (`templates/plan.md`, Test Plan).
 Do not assume every repository has every check. Find the real commands, in this order of reliability:
 
 1. CI configuration (`.github/workflows/`, `.gitlab-ci.yml`, `azure-pipelines.yml`, ...)
-2. Project instructions (`AGENTS.md`, `CONTRIBUTING`, README)
+2. Project instructions (`AGENTS.md`, `CLAUDE.md` or other AI instruction files, `CONTRIBUTING`, README)
 3. Package scripts (`package.json`, `Makefile`, `justfile`, `pyproject.toml`, `tox.ini`, ...)
 4. Tool configuration (`tsconfig.json`, `vitest.config.*`, `jest.config.*`, `playwright.config.*`, `.storybook/`)
 

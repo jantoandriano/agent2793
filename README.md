@@ -44,7 +44,7 @@ Instead of the manual steps below, open the project's main checkout in Kilo and 
 Set up agent2793 in this project by following D:/Projects/agent2793/SETUP.md (section A).
 ```
 
-The agent creates or merges `.kilo/kilo.jsonc`, adds `.work/local-files`, keeps both out of git, checks the validation commands, and reports what it changed. It asks before touching any committed file. Reload the window afterwards so the instructions load.
+The agent creates or merges `.kilo/kilo.jsonc`, adds `.work/local-files`, keeps both out of git, and reports what it changed. It reuses the project's existing AI instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, ...) by adding them to `instructions` — it does not create new ones — and only reports which validation commands `finish-ticket` would run. No committed file is changed. Reload the window afterwards so the instructions load.
 
 To start a ticket from chat (in the main checkout):
 
@@ -88,9 +88,13 @@ echo ".kilo/kilo.jsonc" >> .work/local-files
 - `.work/local-files` makes `start-ticket` copy the uncommitted `.kilo/kilo.jsonc` into every ticket worktree — a new worktree contains only committed files.
 - Nothing here is committed. Keep `.kilo/` out of git through your global gitignore or `.git/info/exclude`; `start-ticket` excludes `.work/` automatically.
 
+Project rules:
+
+- **Existing instruction files are reused.** If the project already has `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`, or similar, those are the project rules — add non-`AGENTS.md` files to `instructions` in `.kilo/kilo.jsonc` (relative paths, e.g. `"CLAUDE.md"`). Kilo loads `AGENTS.md` itself.
+- **No instruction file yet?** Optionally add one (e.g. `AGENTS.md`: "Use pnpm. Biome, not ESLint. Tests: Vitest. Validate with `pnpm check`."). Not required.
+
 Optional, committed to the project:
 
-- **`AGENTS.md`** — project rules that override the generic ones, e.g. "Use pnpm. Biome, not ESLint. Tests: Vitest. Validate with `pnpm check`."
 - **`.agent2793/validation`** — the exact checks `finish-ticket` should run, one `name: command` per line, only if automatic detection gets them wrong (see [`workspace/structure.md`](workspace/structure.md#project-validation-override)).
 
 ### For each ticket

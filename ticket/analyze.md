@@ -29,7 +29,7 @@ Separate requirements from implementation suggestions. "Add a retry so the job s
 
 Answer "How does this repository already solve problems like this?" before "How should I implement this?"
 
-- Project instructions: `AGENTS.md`, `CONTRIBUTING`, `README`, project rule files.
+- Project instructions: whatever AI instruction files the project has (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`, ...), plus `CONTRIBUTING`, `README`, and project rule files. They are project rules regardless of which tool they were written for.
 - Stack: package manifests, lockfiles, framework, build tools.
 - Validation commands: CI config and package scripts (`rules/testing.md`).
 - Relevant code: search for the domain terms of the ticket; trace from entry points (routes, components, commands) to the code doing the work; read callers of what you will change.

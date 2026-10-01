@@ -62,16 +62,30 @@ If not ignored, append it to `.git/info/exclude` (local, untracked) — e.g. `/.
 
 Then confirm `git status --short` shows no new entries compared to step 1.
 
-### 5. Discover validation
+### 5. Reuse the project's existing instruction files
 
-Find the project's validation commands (`rules/testing.md`, "Discover validation commands"): CI config, package scripts, Makefile, README. Compare with what `scripts/finish-ticket` would detect automatically (see its `--help`).
+Projects often already have instructions written for some AI tool. They are the project rules (`AGENTS.md` §3). **Use them as they are. Never create a new instruction file (`AGENTS.md` or any other) during setup, and do not offer to.**
 
-- Detection matches the project → nothing to do.
-- Detection would miss or run the wrong commands → propose `.agent2793/validation` (one `name: command` per line, see `workspace/structure.md`). It is a tracked file: ask before creating it.
+Look in the project root for:
 
-### 6. Offer project rules (optional)
+| File | Usually written for |
+|---|---|
+| `AGENTS.md` | Kilo, Codex, many others |
+| `CLAUDE.md`, `.claude/CLAUDE.md` | Claude Code |
+| `.cursorrules`, `.cursor/rules/*.mdc` | Cursor |
+| `.github/copilot-instructions.md` | GitHub Copilot |
+| `.kilocode/rules/*.md`, `.roo/rules/*.md`, `.clinerules` | Older Kilo Code, Roo, Cline |
+| `.windsurfrules`, `GEMINI.md`, `CONVENTIONS.md` | Windsurf, Gemini, Aider |
 
-If the project has no `AGENTS.md`, offer to draft one with the conventions you found (package manager, lint/format tools, test framework, validation commands, branch naming). It is tracked: show the draft and ask before writing it.
+For **Kilo**: Kilo loads the project's `AGENTS.md` by itself. For every other file found, add its repository-relative path (or glob, e.g. `.cursor/rules/*.mdc`) to `instructions` in `.kilo/kilo.jsonc`, after the agent2793 entry, so the session follows those rules too. If a file only imports others (e.g. `CLAUDE.md` containing `@AGENTS.md`), add the imported files instead, skipping `AGENTS.md`. Use relative paths so each ticket worktree loads its own copy.
+
+These are edits to the local `.kilo/kilo.jsonc` only; tracked files stay unchanged.
+
+### 6. Check validation (report only)
+
+Find the project's validation commands (`rules/testing.md`, "Discover validation commands"): CI config, package scripts, Makefile, README, and the instruction files from step 5. Compare with what `scripts/finish-ticket` would detect automatically (see its `--help`).
+
+Do not create `.agent2793/validation` and do not ask about it. Report what `finish-ticket` would run. If that differs from what the project uses, say so in the report and mention that `.agent2793/validation` can be added later if the human wants (`workspace/structure.md`).
 
 ### 7. Report
 
@@ -79,12 +93,13 @@ If the project has no `AGENTS.md`, offer to draft one with the conventions you f
 agent2793 set up in <project>
 
 Created/changed:
-- .kilo/kilo.jsonc — <created | added instruction entry | already configured>
+- .kilo/kilo.jsonc — <created | added instruction entries | already configured>
 - .work/local-files — <created | added .kilo/kilo.jsonc | already listed>
 - .git/info/exclude — <entries added | nothing needed>
 
-Validation commands: <list>  (automatic detection: <ok | .agent2793/validation proposed>)
-Tracked files changed: none   (or: list, with the human's approval)
+Project instructions in use: <AGENTS.md (loaded by Kilo), CLAUDE.md (added to instructions), ... | none found>
+Validation finish-ticket would run: <list>  (<matches the project | differs: ... — .agent2793/validation can be added later>)
+Tracked files changed: none
 
 Next: start a ticket — "Start ticket <ID> with agent2793".
 Note: reload the editor window (or restart the agent session) so the new instructions load.
