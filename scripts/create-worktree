@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# create-worktree — create (or reuse) an isolated branch + worktree for one ticket.
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: create-worktree <TICKET-ID> [options]
+
+Creates branch <prefix>/<TICKET-ID> and worktree ../worktrees/<TICKET-ID>
+next to the main worktree. Reuses them if they already exist for this ticket.
+
+Options:
+  --type TYPE     feature | bug | refactor | investigation | chore  (default: feature)
+  --base REF      start point for a new branch (default: origin/HEAD, main, master, develop)
+  --branch NAME   branch name (default: <prefix>/<TICKET-ID>, prefix from --type)
+  --path DIR      worktree directory (default: $EA_WORKTREE_ROOT/<ID> or ../worktrees/<ID>)
+  -h, --help      show this help
+
+Run from anywhere inside the target repository. Never modifies other worktrees.
+EOF
+}
+
+id="" type="feature" base="" branch="" path=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --type) type=${2:?--type needs a value}; shift 2 ;;
+    --base) base=${2:?--base needs a value}; shift 2 ;;
+    --branch) branch=${2:?--branch needs a value}; shift 2 ;;
+    --path) path=${2:?--path needs a value}; shift 2 ;;
+    -h | --help) usage; exit 0 ;;
+    -*) ea_die "unknown option '$1' (see --help)" ;;
+    *) [[ -z "$id" ]] || ea_die "unexpected argument '$1'"; id=$1; shift ;;
+  esac
+done
+[[ -n "$id" ]] || { usage >&2; exit 1; }
+
+ea_require_git_repo
+ea_validate_ticket_id "$id"
+main=$(ea_main_worktree)
+
+[[ -n "$branch" ]] || branch="$(ea_branch_prefix "$type")/$id"
+[[ -n "$path" ]] || path=$(ea_default_worktree_path "$main" "$id")
+[[ -n "$base" ]] || base=$(cd "$main" && ea_default_base)
+
+git check-ref-format --branch "$branch" >/dev/null || ea_die "invalid branch name '$branch'"
+
+existing=$(ea_worktree_for_branch "$branch")
+if [[ -n "$existing" ]]; then
+  if [[ -d "$path" && "$(ea_abspath "$existing")" == "$(ea_abspath "$path")" ]]; then
+    echo "Worktree already exists for $branch: $path (reusing)"
+    exit 0
+  fi
+  ea_die "branch '$branch' is already checked out in '$existing' — open that worktree instead"
+fi
+
+[[ ! -e "$path" ]] || ea_die "'$path' already exists and is not the worktree for '$branch'"
+mkdir -p "$(dirname "$path")"
+
+if git -C "$main" show-ref --verify --quiet "refs/heads/$branch"; then
+  echo "Branch $branch exists; adding worktree for it"
+  git -C "$main" worktree add "$path" "$branch"
+else
+  git -C "$main" rev-parse --verify --quiet "$base^{commit}" >/dev/null || ea_die "base '$base' not found"
+  git -C "$main" worktree add -b "$branch" "$path" "$base"
+fi
+
+echo "Created worktree $path on branch $branch"

@@ -1,205 +1,268 @@
 # Engineering Agent
 
-**Engineering Agent is not a coding agent. It is a reusable engineering behavior layer for coding agents.**
+A reusable engineering operating system for AI coding agents.
 
-It is a set of plain Markdown documents — a behavioral contract, a skill, commands, workflows, and templates — that you load into an existing AI coding agent (Kilo Code, Claude Code, Codex, and others) so that it works the way a careful, experienced software engineer does: understand the task, investigate the repository, plan, implement, test, debug by root cause, review the real diff, validate, and report honestly.
-
-## The problem
-
-Coding agents are good at editing files. Left to defaults, they often:
-
-- start editing before understanding the task or the repository
-- invent new patterns instead of following existing ones
-- treat tests as an afterthought, or skip them
-- "fix" failures by trial and error, or by weakening tests
-- loop forever on the same failure
-- touch unrelated files, or overwrite uncommitted user work
-- declare success without running the build, the tests, or looking at the diff
-
-Engineering Agent addresses these with concrete, checkable rules — for example: *run `git status` before the first edit and preserve existing changes*; *at most 3 focused fix attempts per failure, then escalate*; *never report a check as passing unless you ran it after your last change*.
-
-## How it differs from a coding agent
-
-| | Coding agent (Kilo Code, Claude Code, Codex, ...) | Engineering Agent |
-|---|---|---|
-| Reads, searches, edits files | ✅ | — |
-| Runs commands, uses git | ✅ | — |
-| Model, reasoning, tool calling | ✅ | — |
-| Decides *how* to approach an engineering task | Generic defaults | ✅ Defined lifecycle and rules |
-| When to ask a human | Varies | ✅ Explicit escalation rules |
-| What "done" means | Varies | ✅ Evidence-based Definition of Done |
-
-The coding agent is the runtime. Engineering Agent is the professional discipline it follows. There is no server, no runtime, no API integration — only behavior definitions.
-
-## Supported providers
-
-| Provider | Adapter |
-|---|---|
-| Kilo Code (first target) | [`providers/kilo-code/`](providers/kilo-code/README.md) |
-| Claude Code | [`providers/claude-code/`](providers/claude-code/README.md) |
-| Codex | [`providers/codex/`](providers/codex/README.md) |
-
-Any agent that can load instruction files and read files on demand can use it; see [`providers/README.md`](providers/README.md) for writing a new adapter.
-
-## Installation (concept)
+Engineering Agent is **not an application and not a coding agent**. It is a set of plain Markdown instructions plus three small shell scripts that make AI coding agents (Kilo Code, Claude Code, Cursor, Codex, ...) work tickets the way a careful engineer does — and let several of them work on the same repository at the same time without stepping on each other.
 
 ```text
-Clone Engineering Agent → pick your provider → link the contract, skill, and commands into the provider's user-level config → open any repository
+Reusable instructions + ticket workflow + git worktree isolation + ticket context
++ dependency awareness + validation + review
 ```
 
-1. Clone this repository to a stable location (recommended `~/.engineering-agent`). This is the **Engineering Agent root**.
-2. Follow your provider's adapter to:
-   - make `core/AGENTS.md` always-loaded instructions, and state where the root is
-   - expose `core/skills/software-engineering/` as a skill
-   - expose `commands/*.md` as slash commands
-3. Open any repository and give the agent a task.
+## What it gives you
 
-Installing at user level means target repositories need no changes and do not need to know which provider you use.
-
-## Usage (concept)
-
-```text
-/engineer Add CSV export to the invoice list. Columns: number, customer, date, total.
-          Empty list should export only the header.
-```
-
-The agent then, in order:
-
-1. runs `git status` and notes any uncommitted work it must preserve
-2. extracts acceptance criteria, constraints, non-goals; asks only material questions
-3. finds how the repository already does similar exports, its test conventions, and its validation commands
-4. writes a short plan (files, tests, commands, risks)
-5. implements the smallest complete change with tests
-6. runs targeted tests; on failure debugs by root cause (max 3 attempts, then asks)
-7. reviews `git diff` across correctness, scope, types, security, tests, compatibility
-8. runs typecheck, lint, tests, build
-9. ends with a report and one status: `READY FOR PR`, `NEEDS HUMAN INPUT`, or `BLOCKED`
-
-Example report tail:
-
-```text
-## Validation
-- pnpm typecheck — passed
-- pnpm lint — passed
-- pnpm test — passed (214 tests, 6 new)
-Not verified:
-- pnpm test:e2e — requires a browser runtime not available here.
-
-## Final status
-NEEDS HUMAN INPUT — e2e suite must be run before merging.
-```
-
-## Core workflow
-
-```text
-Understand → Clarify → Investigate → Plan → Implement → Test → Fix → Review → Validate → Complete
-```
-
-The lifecycle moves backward when evidence requires it:
-
-```text
-Test fails            → Fix → Implement → Test
-Review finds an issue → Implement → Test → Review
-Plan proves wrong     → Plan (updated, with the reason stated)
-```
-
-Every phase is scaled to the task — a typo fix runs through the same phases in seconds. Task-specific workflows refine the lifecycle:
-
-| Workflow | For |
-|---|---|
-| [`workflows/feature.md`](workflows/feature.md) | New functionality |
-| [`workflows/bugfix.md`](workflows/bugfix.md) | Incorrect behavior — reproduce first, fix the root cause, add a regression test |
-| [`workflows/refactor.md`](workflows/refactor.md) | Structural change — safety net first, small steps, behavior preserved |
-| [`workflows/investigation.md`](workflows/investigation.md) | Understanding or diagnosis without code changes |
+- **Consistent behavior** — every agent session follows the same rules: understand before changing, minimal change, existing patterns first, root-cause debugging, evidence before claims.
+- **A standard ticket workflow** — analyze → plan → human checkpoint → implement → validate → self-review → report.
+- **Parallel tickets** — one branch, one worktree, one context directory, one agent session per ticket.
+- **Dependency detection** — before planning, each ticket is classified `ISOLATED`, `RELATED`, `BLOCKED`, or `CONFLICTING` against other active tickets.
+- **Honest completion** — `READY_FOR_PR` only after validation actually ran and the real diff was reviewed.
+- **Project overrides** — your repository's own `AGENTS.md` and rules take precedence over the generic ones.
+- **Human approval at decision points** — public API changes, migrations, security, scope expansion, unclear dependencies.
 
 ## Repository layout
 
 ```text
-core/
-  AGENTS.md                         Behavioral contract (always loaded)
-  skills/software-engineering/      Detailed phase guidance (loaded on demand)
-commands/                           /engineer, /plan, /review, /test, /debug
-workflows/                          feature, bugfix, refactor, investigation
-templates/                          task-plan, test-plan, review-report
-providers/                          Provider adapters (the only provider-specific content)
+AGENTS.md              entry point for AI agents — the contract
+rules/                 engineering, architecture, coding, typescript, react, testing, git, security, documentation
+workflows/             ticket (canonical), feature, bug-fix, refactor, investigation, code-review, release
+ticket/                phase instructions: analyze, plan, implement, validate, review, finish
+templates/             ticket, plan, dependency-analysis, review, implementation-report
+workspace/             worktree model and ticket context structure
+scripts/               create-worktree, start-ticket, finish-ticket
+providers/             how to load this into Kilo Code, Claude Code, Codex, others
 ```
 
-## Skills
+## Walkthrough
 
-The `software-engineering` skill ([`core/skills/software-engineering/SKILL.md`](core/skills/software-engineering/SKILL.md)) holds one file per concern:
+### 1. Install Engineering Agent
 
-| File | Covers |
-|---|---|
-| [`requirements.md`](core/skills/software-engineering/requirements.md) | Extracting acceptance criteria, non-goals, assumptions; resolve vs. assume vs. ask |
-| [`investigation.md`](core/skills/software-engineering/investigation.md) | Learning the repository: structure, conventions, similar code, tests, validation commands |
-| [`planning.md`](core/skills/software-engineering/planning.md) | Concrete, proportional, test-aware plans |
-| [`implementation.md`](core/skills/software-engineering/implementation.md) | Smallest complete change, existing patterns, compatibility, types, errors |
-| [`testing.md`](core/skills/software-engineering/testing.md) | Test planning, targeted vs. full validation, reading results |
-| [`debugging.md`](core/skills/software-engineering/debugging.md) | Root-cause loop, failure classification, 3-attempt retry limit |
-| [`code-review.md`](core/skills/software-engineering/code-review.md) | Reviewing the actual diff; severities; review → fix loop |
-| [`git.md`](core/skills/software-engineering/git.md) | Baseline, preserving user changes, forbidden destructive commands |
-| [`completion.md`](core/skills/software-engineering/completion.md) | Definition of Done, final report, final status |
-| [`human-escalation.md`](core/skills/software-engineering/human-escalation.md) | When and how to stop and ask |
+```sh
+git clone <engineering-agent-repo-url> ~/.engineering-agent
+export PATH="$HOME/.engineering-agent/scripts:$PATH"     # optional; Windows: use Git Bash
+```
 
-The skill uses the common `SKILL.md` format (frontmatter `name` and `description`), so providers with skill support can load it directly.
+### 2. Load the instructions into your AI coding tool (once)
 
-## Commands
+Make `AGENTS.md` part of your tool's global instructions. For Kilo Code:
 
-| Command | Does | Modifies code |
+```sh
+mkdir -p ~/.kilocode/rules
+ln -s ~/.engineering-agent/AGENTS.md ~/.kilocode/rules/engineering-agent.md
+echo "Engineering Agent root: $HOME/.engineering-agent" > ~/.kilocode/rules/engineering-agent-root.md
+```
+
+Other tools: [`providers/`](providers/README.md). Your application repositories need no changes.
+
+### 3. Create the ticket workspace and worktree
+
+From inside your application repository:
+
+```sh
+cd ~/projects/my-app
+start-ticket HYP-123 --title "Add CSV export to invoice list"
+```
+
+```text
+Starting HYP-123...
+
+Preparing worktree (new branch 'feature/HYP-123')
+Created worktree /home/me/projects/worktrees/HYP-123 on branch feature/HYP-123
+
+Branch:
+feature/HYP-123
+
+Base:
+main
+
+Worktree:
+/home/me/projects/worktrees/HYP-123
+
+Context:
+/home/me/projects/my-app/.work/HYP-123/ticket.md
+
+Ready to open in your AI coding agent (e.g. Kilo Code):
+  /home/me/projects/worktrees/HYP-123
+```
+
+This created the branch, the worktree at `../worktrees/HYP-123`, the context directory `.work/HYP-123/` with `ticket.md`, and excluded `.work/` from git. Use `--type bug|refactor|investigation|chore` for other ticket types, and `--base <branch>` to build on another ticket's unmerged branch.
+
+Without the script:
+
+```sh
+git worktree add ../worktrees/HYP-123 -b feature/HYP-123 main
+mkdir -p .work/HYP-123 && cp ~/.engineering-agent/templates/ticket.md .work/HYP-123/   # fill in placeholders
+```
+
+### 4. Open the worktree in Kilo Code
+
+Open `../worktrees/HYP-123` as its own window. Never point two sessions at the same worktree.
+
+### 5. Instructions load automatically
+
+Kilo Code loads `AGENTS.md` from global rules, plus your project's own `AGENTS.md`/rules. The agent reads the relevant `rules/`, `ticket/`, and `workflows/` files from the Engineering Agent root as it goes.
+
+### 6. Give the agent the ticket
+
+```text
+Implement Jira ticket HYP-123. Follow the engineering-agent workflow.
+
+Add CSV export to the invoice list.
+- Export button on /invoices
+- Columns: number, customer, date, total
+- Empty list exports the header only
+```
+
+### 7. The agent executes the workflow
+
+```text
+analyze   verify branch/worktree → understand ticket → investigate codebase
+          → dependency analysis (ISOLATED / RELATED / BLOCKED / CONFLICTING)
+plan      plan.md: files, approach, tests, validation commands, risks
+          → human checkpoint if triggered (API change, migration, security, ...)
+implement smallest correct change + tests; root-cause debugging; max 3 fix attempts per failure
+validate  the project's own typecheck / lint / tests / build
+review    self-review of the real git diff → fix findings → validate again
+report    implementation-report.md; status READY_FOR_PR or BLOCKED
+```
+
+Progress is recorded in `.work/HYP-123/`: `ticket.md` (status), `analysis.md`, `dependency-analysis.md`, `plan.md`, `validation.md`, `review.md`, `implementation-report.md`. A new session can resume from these files.
+
+### 8. Review the result
+
+```sh
+finish-ticket HYP-123
+```
+
+Verifies git state, runs the validation it can detect, scans the diff for debug code, TODOs, and conflict markers, writes `validation.md`, and reports `READY_FOR_PR` or `NOT READY` with blockers. It never commits, pushes, or merges.
+
+Then read `implementation-report.md` — it separates **Implemented**, **Verified**, **Not verified**, **Known issues**, and **Suggested follow-ups** — and review the diff yourself.
+
+### 9. Create the PR
+
+You commit, push, and open the PR (the agent does this only when explicitly asked).
+
+### 10. Clean up after merge
+
+```sh
+git worktree remove ../worktrees/HYP-123
+git branch -d feature/HYP-123
+```
+
+Set `ticket.status: DONE` in `.work/HYP-123/ticket.md`; keep or archive the context directory.
+
+## Parallel tickets
+
+```text
+Terminal 1                         Terminal 2                         Terminal 3
+start-ticket HYP-101               start-ticket HYP-102 --type bug    start-ticket HYP-103
+→ ../worktrees/HYP-101             → ../worktrees/HYP-102             → ../worktrees/HYP-103
+→ Kilo session: "Implement         → Kilo session: "Implement         → Kilo session: "Implement
+  HYP-101 ..."                       HYP-102 ..."                       HYP-103 ..."
+```
+
+```text
+my-app/                     main worktree (you)
+  .work/HYP-101/ HYP-102/ HYP-103/
+worktrees/
+  HYP-101/   feature/HYP-101   ← session 1
+  HYP-102/   bugfix/HYP-102    ← session 2
+  HYP-103/   feature/HYP-103   ← session 3
+```
+
+### Why each ticket needs an isolated worktree
+
+If agents share one working directory, switching branches changes files under the other agent mid-edit, both agents' changes end up in one diff, tests run against someone else's half-finished code, and discarding "my" change can destroy the other agent's work. Worktrees give each ticket its own directory and branch while sharing one git object store, so every agent can still *read* the others' branches for dependency analysis. Details: [`workspace/README.md`](workspace/README.md).
+
+### Dependencies between tickets
+
+Each agent compares its planned files and APIs with the other tickets' `plan.md` and branch diffs:
+
+```text
+HYP-101 → changes FormGenerator API
+HYP-102 → updates FormGenerator consumers      ⇒ HYP-102 BLOCKED by HYP-101
+HYP-103 → Storybook docs for unrelated widget  ⇒ ISOLATED
+```
+
+For HYP-102 the agent stops and asks: wait for HYP-101, or build on its branch (`start-ticket HYP-102 --base feature/HYP-101`). It does not redesign the API itself, and it never invents dependencies — uncertain ones are marked *potential* and raised with you.
+
+Worktrees isolate files, not the machine: dependency installs are per worktree, and dev-server ports, local databases, and caches can still collide. See [`workspace/README.md`](workspace/README.md#shared-resources-beyond-git).
+
+## Ticket lifecycle
+
+```text
+TODO → ANALYZING → PLANNED → READY → IN_PROGRESS → VALIDATING → REVIEWING → READY_FOR_PR → DONE
+                                         ↑               │            │
+                                         └───────────────┴────────────┘   failures and findings loop back
+BLOCKED (any time, with reason)    CANCELLED (human)
+```
+
+`DONE` is set by a human after merge. Writing code never makes a ticket done. Full transition table: [`workflows/ticket.md`](workflows/ticket.md).
+
+## Agent roles
+
+| Role | Does | Phase files |
 |---|---|---|
-| [`/engineer`](commands/engineer.md) | Full lifecycle, ends with a final report | Yes |
-| [`/plan`](commands/plan.md) | Understand → Investigate → Plan | No |
-| [`/review`](commands/review.md) | Reviews current diff; findings with severity, location, reasoning, fix | No (unless asked) |
-| [`/test`](commands/test.md) | Finds and runs the right validation; diagnoses failures | Only in-scope fixes when expected |
-| [`/debug`](commands/debug.md) | Reproduces and root-causes one failure | Only if a fix is requested |
+| Investigator | Understands ticket, codebase, dependencies | `ticket/analyze.md` |
+| Planner | Produces the plan, handles the checkpoint | `ticket/plan.md` |
+| Implementer | Changes the code and tests | `ticket/implement.md` |
+| Validator | Runs the project's checks | `ticket/validate.md` |
+| Reviewer | Reviews the diff, writes the report | `ticket/review.md`, `ticket/finish.md` |
 
-Command names may be prefixed by a provider adapter to avoid collisions (for example `/ea-review` in Claude Code).
+One session normally plays all roles in sequence. Because roles communicate only through files in `.work/<ID>/`, separate agents can take roles later without changing the documents.
 
-## Provider adapters
-
-Adapters map each piece to the provider's mechanisms — instruction files, skills, slash commands — and document limitations such as instruction size limits or read-only modes. Provider-specific statements live only in `providers/`. To support another agent, write a new adapter following [`providers/README.md`](providers/README.md); the core does not change.
-
-## Project-specific customization
-
-Engineering Agent is the most general layer. Projects refine it with their normal instruction files:
+## Project-specific rules
 
 ```text
-Engineering Agent (core/AGENTS.md)
+Global engineering rules (Engineering Agent)
         ↓
-Project AGENTS.md (or CLAUDE.md, etc.)
+Project rules (your repo's AGENTS.md, rule files)
         ↓
-Project-specific rules
+Ticket requirements
         ↓
-Task requirements
+Human instructions
 ```
 
-More specific layers override more general ones. Example:
+More specific wins. Example project `AGENTS.md`:
 
-```text
-Engineering Agent:  Use the project's existing conventions and validation commands.
-Project AGENTS.md:  Use pnpm. Lint with Biome, not ESLint. Tests use Vitest. Run `pnpm check` before finishing.
-Result:             The agent uses pnpm, Biome, Vitest, and runs `pnpm check` during Validate.
+```markdown
+- Package manager: pnpm. Lint/format: Biome (not ESLint/Prettier). Tests: Vitest.
+- Validation: `pnpm check` (typecheck + lint + test), then `pnpm build`.
+- Feature branches: `feat/<TICKET-ID>`.
 ```
 
-Exception: the **safety rules** in `core/AGENTS.md` (preserve user work, no destructive commands, no false completion claims, protect secrets, escalate when required) can only be relaxed by an explicit instruction from the human in the current session — not by a project file or a ticket.
+The agent uses exactly these. Safety rules — never touch another ticket's work, no destructive commands, no false claims, no secrets, no push/merge unless asked — can only be relaxed by an explicit human instruction in the session.
 
-## Design philosophy
+To control `finish-ticket` validation, commit `.engineering-agent/validation` (see [`workspace/structure.md`](workspace/structure.md#project-validation-override)).
 
-- **Behavior, not runtime.** The coding agent already reads, edits, runs, and reasons. Engineering Agent adds judgment about *how* — nothing else.
-- **Concrete over aspirational.** "Inspect the existing implementation before creating a new abstraction", not "use best practices".
-- **Proportional.** Same lifecycle for every task, scaled to its size. No ceremony for typos, no shortcuts for migrations.
-- **Evidence over assertion.** Nothing is reported as passing, complete, or limited to intended files without a command that shows it.
-- **Maximum safe autonomy.** Proceed independently on what can be determined safely; stop exactly where a human decision is needed.
-- **Provider-neutral core.** Capabilities are described conceptually (read files, search, edit, run commands, inspect git). Provider details live in adapters.
+## Scripts
+
+| Script | Does |
+|---|---|
+| `create-worktree <ID>` | Creates or reuses branch `<prefix>/<ID>` and worktree `../worktrees/<ID>`; refuses if the branch is checked out elsewhere |
+| `start-ticket <ID>` | `create-worktree` + `.work/<ID>/ticket.md` + git exclude + list of other active tickets + what to open |
+| `finish-ticket [ID]` | Git checks, detected validation, diff scan, `validation.md`, report draft, readiness verdict (exit 0 ready, 2 not ready) |
+
+All support `--help`. Bash; on Windows run them from Git Bash or WSL. They never commit, push, merge, or touch other tickets' worktrees.
+
+## Design principles
+
+- **Instructions, not infrastructure.** The coding agent already reads, edits, runs, and reasons. This repository only defines how.
+- **Tool-neutral.** Plain Markdown; provider specifics live in `providers/`.
+- **Explicit and checkable.** "Run `git branch --show-current` before editing", not "be careful".
+- **Files as the interface.** Ticket state lives in files humans and agents can both read, so sessions can resume and roles can be split.
+- **Maximum safe autonomy.** Proceed when clear and low-risk; stop at real decision points.
+
+## Not included (yet)
+
+Deliberately out of scope for the first version: Jira API integration, automatic PR creation, autonomous merging, distributed agent infrastructure, databases, dashboards, cloud orchestration.
 
 ## Roadmap
 
-- Validate and refine the Kilo Code adapter against real tasks
-- Adapters for Cursor and other agents
-- Install scripts per provider (symlink-based, idempotent)
-- Example transcripts showing each workflow end to end
-- Optional stack-specific skills (e.g. frontend, database migrations) layered on the core
-- A lightweight checker for internal references between documents
+- Field-test the Kilo Code workflow on real multi-ticket sprints
+- Native PowerShell versions of the scripts
+- Optional Jira import into `ticket.md` (read-only)
+- More stack rule files (Python, Go, backend APIs, database migrations)
+- A command to summarize all active tickets and their overlaps
 
 ## License
 

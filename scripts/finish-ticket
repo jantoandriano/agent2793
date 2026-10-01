@@ -1,0 +1,314 @@
+#!/usr/bin/env bash
+# finish-ticket — check whether a ticket is ready for PR. Never commits, pushes, or merges.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: finish-ticket [TICKET-ID] [options]
+
+  1. verifies git state of the ticket worktree (branch, status, conflicts)
+  2. runs the validation commands it can detect
+  3. inspects the diff against the base branch (changed files, debug code, TODOs)
+  4. writes .work/<ID>/validation.md and drafts implementation-report.md if missing
+  5. reports whether the ticket is ready for PR
+
+TICKET-ID defaults to the ID in the current branch name.
+
+Options:
+  --base REF        compare against REF instead of workspace.base in ticket.md
+  --no-validate     skip running validation commands (result: not ready)
+  -h, --help        show this help
+
+Validation commands, in order of precedence:
+  .engineering-agent/validation in the repository  (lines "name: command")
+  package.json scripts   typecheck, lint, format:check, test, build
+  Makefile targets       typecheck, lint, test, build
+  go.mod                 go vet ./..., go test ./..., go build ./...
+  Cargo.toml             cargo test, cargo build
+
+Exit status: 0 ready for PR, 2 not ready, 1 error.
+EOF
+}
+
+id="" base_opt="" validate=1
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --base) base_opt=${2:?--base needs a value}; shift 2 ;;
+    --no-validate) validate=0; shift ;;
+    -h | --help) usage; exit 0 ;;
+    -*) ea_die "unknown option '$1' (see --help)" ;;
+    *) [[ -z "$id" ]] || ea_die "unexpected argument '$1'"; id=$1; shift ;;
+  esac
+done
+
+ea_require_git_repo
+main=$(ea_main_worktree)
+if [[ -z "$id" ]]; then
+  id=$(ea_ticket_id_from_branch "$(git branch --show-current)") ||
+    ea_die "cannot infer ticket id from branch '$(git branch --show-current)'; pass it explicitly"
+fi
+ea_validate_ticket_id "$id"
+
+context="$main/.work/$id"
+ticket="$context/ticket.md"
+[[ -f "$ticket" ]] || ea_die "no ticket context at $ticket (run start-ticket first)"
+
+worktree=$(ea_ticket_field "$ticket" worktree)
+branch=$(ea_ticket_field "$ticket" branch)
+base=${base_opt:-$(ea_ticket_field "$ticket" base)}
+title=$(ea_ticket_field "$ticket" title)
+status=$(ea_ticket_field "$ticket" status)
+[[ -d "$worktree" ]] || ea_die "worktree '$worktree' from ticket.md does not exist"
+cd "$worktree" || exit 1
+
+blockers=()
+warnings=()
+
+# --- 1. Git state ------------------------------------------------------------------------------
+current=$(git branch --show-current)
+[[ "$current" == "$branch" ]] || blockers+=("worktree is on '$current', expected '$branch'")
+
+case "$status" in
+  BLOCKED | CANCELLED) blockers+=("ticket status is $status") ;;
+esac
+
+merge_base=$(git merge-base "$base" HEAD 2>/dev/null) || ea_die "cannot find merge base between '$base' and HEAD"
+
+unmerged=$(git diff --name-only --diff-filter=U 2>/dev/null)
+[[ -z "$unmerged" ]] || blockers+=("unmerged files: $(echo "$unmerged" | tr '\n' ' ')")
+
+uncommitted=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+[[ "$uncommitted" -eq 0 ]] || warnings+=("$uncommitted uncommitted path(s) — commit before opening the PR")
+
+# Changed files: tracked changes vs. merge base (committed + uncommitted), plus untracked files.
+changed=$(git diff --name-status "$merge_base" -- 2>/dev/null)
+untracked=$(git ls-files --others --exclude-standard)
+files_md=""
+while IFS=$'\t' read -r st file rest; do
+  [[ -n "$st" ]] || continue
+  files_md+="- \`$st\` ${rest:-$file}"$'\n'
+done <<<"$changed"
+while IFS= read -r file; do
+  [[ -n "$file" ]] && files_md+="- \`??\` $file (untracked)"$'\n'
+done <<<"$untracked"
+[[ -n "$files_md" ]] || blockers+=("no changes compared to $base")
+
+# --- 2. Diff inspection --------------------------------------------------------------------------
+added_lines() {
+  git diff -U0 --no-color "$merge_base" -- 2>/dev/null |
+    awk '/^\+\+\+ / { f = substr($0, 7); next } /^\+/ { print f ":\t" substr($0, 2) }'
+  if [[ -n "$untracked" ]]; then
+    while IFS= read -r file; do
+      grep -IHn '' -- "$file" 2>/dev/null | sed 's/:\([0-9]*\):/:\t/'
+    done <<<"$untracked"
+  fi
+}
+all_added=$(added_lines)
+markers=$(grep -E $'\t(<<<<<<<|>>>>>>>)( |$)' <<<"$all_added" || true)
+debug=$(grep -E 'console\.(log|debug)\(|debugger;?$|\.only\(|(^|[^A-Za-z_])(fit|fdescribe|xit|xdescribe)\(|\.skip\(' <<<"$all_added" || true)
+todos=$(grep -E 'TODO|FIXME|XXX' <<<"$all_added" || true)
+[[ -z "$markers" ]] || blockers+=("conflict markers in added lines")
+[[ -z "$debug" ]] || warnings+=("possible debug code or focused/skipped tests — review")
+[[ -z "$todos" ]] || warnings+=("added TODO/FIXME — ensure each references a ticket")
+
+[[ -f "$context/review.md" ]] || blockers+=("self-review not recorded (.work/$id/review.md missing)")
+
+blocked_by=$(awk '/^[[:space:]]*blocked_by:/ { sub(/^[^:]*:[[:space:]]*/, ""); print; exit }' "$ticket")
+[[ -z "$blocked_by" || "$blocked_by" == "[]" ]] || warnings+=("ticket is blocked_by $blocked_by — confirm those are merged")
+
+# --- 3. Validation -------------------------------------------------------------------------------
+names=() cmds=() results=() notes=()
+add_check() { names+=("$1"); cmds+=("$2"); results+=("${3:-}"); notes+=("${4:-}"); }
+
+detect_checks() {
+  local override=".engineering-agent/validation"
+  if [[ -f "$override" ]]; then
+    local line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+      add_check "$(sed 's/:.*//; s/[[:space:]]*$//' <<<"$line")" "$(sed 's/^[^:]*:[[:space:]]*//' <<<"$line")"
+    done <"$override"
+    return
+  fi
+
+  if [[ -f package.json ]]; then
+    local pm=npm
+    [[ -f pnpm-lock.yaml ]] && pm=pnpm
+    [[ -f yarn.lock ]] && pm=yarn
+    [[ -f bun.lockb || -f bun.lock ]] && pm=bun
+    if ! command -v node >/dev/null; then
+      add_check "package.json" "-" "NOT RUN" "node not found"
+      return
+    fi
+    local scripts
+    scripts=$(node -e 'for (const k of Object.keys(require("./package.json").scripts || {})) console.log(k)')
+    local check candidates s found
+    for check in "typecheck:typecheck type-check check-types tsc" "lint:lint" \
+      "format:format:check fmt:check prettier:check check-format" "tests:test test:unit" "build:build"; do
+      candidates=${check#*:}
+      found=""
+      for s in $candidates; do
+        if grep -qxF "$s" <<<"$scripts"; then found=$s; break; fi
+      done
+      [[ -n "$found" ]] || continue
+      if [[ ! -d node_modules ]]; then
+        add_check "${check%%:*}" "$pm run $found" "NOT RUN" "dependencies not installed (node_modules missing)"
+      else
+        add_check "${check%%:*}" "$pm run $found"
+      fi
+    done
+    for s in test:integration test:e2e e2e build-storybook storybook:build build:storybook; do
+      grep -qxF "$s" <<<"$scripts" && add_check "$s" "$pm run $s" "NOT RUN" "not run by finish-ticket; run it if the ticket requires it"
+    done
+    return
+  fi
+
+  if [[ -f Makefile ]] && command -v make >/dev/null; then
+    local t
+    for t in typecheck lint test build; do
+      grep -qE "^$t:" Makefile && add_check "$t" "make $t"
+    done
+    return
+  fi
+
+  if [[ -f go.mod ]] && command -v go >/dev/null; then
+    add_check lint "go vet ./..."
+    add_check tests "go test ./..."
+    add_check build "go build ./..."
+    return
+  fi
+
+  if [[ -f Cargo.toml ]] && command -v cargo >/dev/null; then
+    add_check tests "cargo test"
+    add_check build "cargo build"
+  fi
+}
+
+detect_checks
+mkdir -p "$context/logs"
+ran=0
+for i in "${!names[@]}"; do
+  [[ -z "${results[$i]}" ]] || continue
+  if [[ $validate -eq 0 ]]; then
+    results[i]="NOT RUN"
+    notes[i]="--no-validate"
+    continue
+  fi
+  log="$context/logs/$(tr -c 'A-Za-z0-9_.-' '_' <<<"${names[$i]}" | sed 's/_*$//').log"
+  printf 'Running %-12s %s\n' "${names[$i]}" "${cmds[$i]}"
+  start=$SECONDS
+  if CI=true bash -c "${cmds[$i]}" >"$log" 2>&1; then
+    results[i]="PASS"
+  else
+    results[i]="FAIL"
+  fi
+  notes[i]="$((SECONDS - start))s, log: logs/$(basename "$log")"
+  ran=$((ran + 1))
+done
+
+if [[ ${#names[@]} -eq 0 ]]; then
+  blockers+=("no validation commands detected — add .engineering-agent/validation or validate manually")
+elif [[ $validate -eq 0 ]]; then
+  blockers+=("validation skipped (--no-validate)")
+else
+  blockers_before=${#blockers[@]}
+  for i in "${!names[@]}"; do
+    case "${results[$i]}" in
+      FAIL) blockers+=("${names[$i]} failed (${cmds[$i]})") ;;
+      "NOT RUN")
+        if [[ "${notes[$i]}" == "not run by finish-ticket"* ]]; then
+          warnings+=("${names[$i]} not run — run it if the ticket requires it")
+        else
+          blockers+=("${names[$i]} could not run: ${notes[$i]}")
+        fi
+        ;;
+    esac
+  done
+  if [[ $ran -eq 0 && ${#blockers[@]} -eq $blockers_before ]]; then
+    blockers+=("no required validation command ran")
+  fi
+fi
+
+# --- 4. Write validation.md and the report draft -------------------------------------------------
+table="| Check | Command | Result | Notes |"$'\n'"|---|---|---|---|"$'\n'
+summary=""
+for i in "${!names[@]}"; do
+  table+="| ${names[$i]} | \`${cmds[$i]}\` | ${results[$i]} | ${notes[$i]} |"$'\n'
+  summary+="- ${names[$i]}: ${results[$i]} (\`${cmds[$i]}\`)"$'\n'
+done
+[[ -n "$summary" ]] || summary="- No validation commands detected."$'\n'
+
+if [[ ${#blockers[@]} -eq 0 ]]; then verdict="READY_FOR_PR"; else verdict="NOT READY"; fi
+
+fmt_list() { if [[ $# -eq 0 ]]; then echo "- None"; else printf -- '- %s\n' "$@"; fi; }
+fmt_block() { if [[ -z "$1" ]]; then echo "None"; else printf '```text\n%s\n```\n' "$1"; fi; }
+
+{
+  echo "# Validation: $id"
+  echo
+  echo "Generated by scripts/finish-ticket on $(date '+%Y-%m-%d %H:%M'). Branch \`$current\`, base \`$base\` (merge base \`${merge_base:0:10}\`)."
+  echo
+  printf '%s' "$table"
+  echo
+  echo "## Changed Files"
+  echo
+  printf '%s' "${files_md:-None}"
+  echo
+  echo "## Review Items"
+  echo
+  echo "Debug code / focused or skipped tests:"
+  fmt_block "$debug"
+  echo
+  echo "TODO / FIXME:"
+  fmt_block "$todos"
+  echo
+  echo "## Result: $verdict"
+  echo
+  echo "Blockers:"
+  fmt_list "${blockers[@]}"
+  echo
+  echo "Warnings:"
+  fmt_list "${warnings[@]}"
+} >"$context/validation.md"
+
+report="$context/implementation-report.md"
+# The draft is created once, only when there is something real to report; it is never overwritten,
+# because the agent completes it by hand. validation.md is always current.
+if [[ -f "$report" ]]; then
+  report_note="kept existing — update its Validation section from validation.md"
+elif [[ $ran -eq 0 || -z "$files_md" ]]; then
+  report_note="not created yet — needs changes and at least one validation run"
+else
+  ea_render "$EA_HOME/templates/implementation-report.md" \
+    "ID=$id" "TITLE=$title" "FILES=${files_md%$'\n'}" "VALIDATION=${summary%$'\n'}" >"$report"
+  report_note="draft created — the agent completes Summary, Changes, Review, Limitations, Follow-ups"
+fi
+
+# --- 5. Report -----------------------------------------------------------------------------------
+cat <<EOF
+
+Ticket:     $id — $title
+Worktree:   $worktree
+Branch:     $current (base $base)
+
+Validation:
+$summary
+Validation record:      $context/validation.md
+Implementation report:  $report ($report_note)
+
+Blockers:
+$(fmt_list "${blockers[@]}")
+
+Warnings:
+$(fmt_list "${warnings[@]}")
+
+Result: $verdict
+EOF
+
+if [[ "$verdict" == "READY_FOR_PR" ]]; then
+  echo "The agent may set ticket.status to READY_FOR_PR after completing the implementation report."
+  echo "Nothing was committed, pushed, or merged."
+  exit 0
+fi
+exit 2

@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# start-ticket — create the branch, worktree, and context directory for a ticket.
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: start-ticket <TICKET-ID> [options]
+
+  1. creates branch <prefix>/<TICKET-ID>          (via create-worktree)
+  2. creates worktree ../worktrees/<TICKET-ID>    (via create-worktree)
+  3. creates context directory .work/<TICKET-ID>/ in the main worktree
+  4. creates .work/<TICKET-ID>/ticket.md from templates/ticket.md
+  5. prints the directory to open in your AI coding agent
+
+Options:
+  --title TEXT    ticket title (default: TBD; the agent fills it in)
+  --type TYPE     feature | bug | refactor | investigation | chore  (default: feature)
+  --base REF      start point (default: origin/HEAD, main, master, develop).
+                  Use another ticket's branch to build on its unmerged work.
+  --branch NAME   branch name override
+  --path DIR      worktree directory override
+  -h, --help      show this help
+
+Safe to re-run: existing worktree and ticket.md are reused, never overwritten.
+EOF
+}
+
+id="" title="TBD" type="feature" base="" branch="" path=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --title) title=${2:?--title needs a value}; shift 2 ;;
+    --type) type=${2:?--type needs a value}; shift 2 ;;
+    --base) base=${2:?--base needs a value}; shift 2 ;;
+    --branch) branch=${2:?--branch needs a value}; shift 2 ;;
+    --path) path=${2:?--path needs a value}; shift 2 ;;
+    -h | --help) usage; exit 0 ;;
+    -*) ea_die "unknown option '$1' (see --help)" ;;
+    *) [[ -z "$id" ]] || ea_die "unexpected argument '$1'"; id=$1; shift ;;
+  esac
+done
+[[ -n "$id" ]] || { usage >&2; exit 1; }
+
+ea_require_git_repo
+ea_validate_ticket_id "$id"
+main=$(ea_main_worktree)
+
+[[ -n "$branch" ]] || branch="$(ea_branch_prefix "$type")/$id"
+[[ -n "$path" ]] || path=$(ea_default_worktree_path "$main" "$id")
+[[ -n "$base" ]] || base=$(cd "$main" && ea_default_base)
+
+echo "Starting $id..."
+echo
+
+"$EA_HOME/scripts/create-worktree" "$id" --type "$type" --base "$base" --branch "$branch" --path "$path"
+path=$(ea_abspath "$path")
+
+context="$main/.work/$id"
+mkdir -p "$context"
+ea_exclude_work_dir "$main"
+
+if [[ -f "$context/ticket.md" ]]; then
+  echo "Context exists: $context/ticket.md (kept)"
+else
+  yaml_title=${title//\\/}
+  yaml_title=${yaml_title//\"/\'}
+  ea_render "$EA_HOME/templates/ticket.md" \
+    "ID=$id" "TITLE=$yaml_title" "TYPE=$type" "BRANCH=$branch" "BASE=$base" \
+    "WORKTREE=$path" "CONTEXT=$context" "EA_HOME=$EA_HOME" "DATE=$(date +%Y-%m-%d)" \
+    >"$context/ticket.md"
+fi
+
+# Other tickets with context in this repository — the agent must consider them in dependency analysis.
+others=()
+for f in "$main"/.work/*/ticket.md; do
+  [[ -f "$f" && "$f" != "$context/ticket.md" ]] || continue
+  others+=("$(ea_ticket_field "$f" id)  $(ea_ticket_field "$f" status)  $(ea_ticket_field "$f" branch)")
+done
+
+cat <<EOF
+
+Branch:
+$branch
+
+Base:
+$base
+
+Worktree:
+$path
+
+Context:
+$context/ticket.md
+EOF
+
+if [[ ${#others[@]} -gt 0 ]]; then
+  echo
+  echo "Other tickets in this repository:"
+  printf '  %s\n' "${others[@]}"
+fi
+
+if [[ -f "$path/package.json" && ! -d "$path/node_modules" ]]; then
+  echo
+  echo "Note: dependencies are not installed in the new worktree."
+  echo "The agent installs them during analysis, or install them now with the project's command."
+fi
+
+cat <<EOF
+
+Ready to open in your AI coding agent (e.g. Kilo Code):
+  $path
+
+Suggested prompt:
+  Implement ticket $id. Follow the engineering-agent workflow.
+  Ticket context: $context/ticket.md
+  <paste the ticket description>
+EOF

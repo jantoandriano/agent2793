@@ -1,80 +1,70 @@
 # Adapter: Kilo Code
 
-First practical provider target.
+First practical target.
 
-> Kilo Code evolves quickly (VS Code extension, JetBrains, and CLI share configuration but have changed paths across versions). The paths below follow Kilo Code's documented `.kilocode/` layout. Confirm them against the current Kilo Code documentation for your version; if your version uses a different directory, keep the same mapping and change only the paths.
+> Kilo Code (VS Code, JetBrains, CLI) has changed configuration paths across versions. This adapter uses the documented global rules directory `~/.kilocode/rules/`. If your version uses a different location (newer versions may use `.kilo/`), keep the mapping and change only the path. Kilo Code also reads a project's `AGENTS.md`.
 
 ## Mapping
 
-| Engineering Agent | Kilo Code mechanism |
+| Engineering Agent | Kilo Code |
 |---|---|
-| `core/AGENTS.md` | Global custom rules: `~/.kilocode/rules/` |
-| `core/skills/software-engineering/` | Skills: `~/.kilocode/skills/software-engineering/` |
-| `commands/*.md` | Workflows: `~/.kilocode/workflows/`, invoked as `/<filename>` |
-| `workflows/`, `templates/` | Read from the Engineering Agent root |
+| `AGENTS.md` (always loaded) | Global rule: `~/.kilocode/rules/engineering-agent.md` |
+| `EA_HOME` | Global rule: `~/.kilocode/rules/engineering-agent-root.md` |
+| `rules/`, `ticket/`, `workflows/`, `templates/` | Read on demand from `EA_HOME` |
 | Project rules | Project `AGENTS.md` and `.kilocode/rules/` — loaded by Kilo Code as usual |
 
-## Install (user level)
+## Install
 
-macOS / Linux:
+macOS / Linux / Git Bash:
 
 ```sh
 git clone <engineering-agent-repo-url> ~/.engineering-agent
-EA=~/.engineering-agent
-
-mkdir -p ~/.kilocode/rules ~/.kilocode/skills ~/.kilocode/workflows
-ln -s "$EA/core/AGENTS.md"                     ~/.kilocode/rules/engineering-agent.md
-ln -s "$EA/core/skills/software-engineering"   ~/.kilocode/skills/software-engineering
-for f in "$EA"/commands/*.md; do ln -s "$f" ~/.kilocode/workflows/"$(basename "$f")"; done
-
-echo "Engineering Agent root: $EA" > ~/.kilocode/rules/engineering-agent-root.md
+mkdir -p ~/.kilocode/rules
+ln -s ~/.engineering-agent/AGENTS.md ~/.kilocode/rules/engineering-agent.md
+echo "Engineering Agent root: $HOME/.engineering-agent" > ~/.kilocode/rules/engineering-agent-root.md
 ```
 
-Windows (PowerShell; symlinks need Developer Mode or an elevated shell — otherwise use `Copy-Item` and re-copy after updates):
+Windows PowerShell (symlinks need Developer Mode or an elevated shell; otherwise use `Copy-Item` and re-copy after updates):
 
 ```powershell
 git clone <engineering-agent-repo-url> "$HOME\.engineering-agent"
-$EA = "$HOME\.engineering-agent"
-New-Item -ItemType Directory -Force "$HOME\.kilocode\rules", "$HOME\.kilocode\skills", "$HOME\.kilocode\workflows" | Out-Null
-New-Item -ItemType SymbolicLink -Path "$HOME\.kilocode\rules\engineering-agent.md" -Target "$EA\core\AGENTS.md"
-New-Item -ItemType SymbolicLink -Path "$HOME\.kilocode\skills\software-engineering" -Target "$EA\core\skills\software-engineering"
-Get-ChildItem "$EA\commands\*.md" | ForEach-Object { New-Item -ItemType SymbolicLink -Path "$HOME\.kilocode\workflows\$($_.Name)" -Target $_.FullName }
-"Engineering Agent root: $EA" | Set-Content "$HOME\.kilocode\rules\engineering-agent-root.md"
+New-Item -ItemType Directory -Force "$HOME\.kilocode\rules" | Out-Null
+New-Item -ItemType SymbolicLink -Path "$HOME\.kilocode\rules\engineering-agent.md" -Target "$HOME\.engineering-agent\AGENTS.md"
+"Engineering Agent root: $HOME\.engineering-agent" | Set-Content "$HOME\.kilocode\rules\engineering-agent-root.md"
 ```
 
-## Usage
+## Use
+
+```sh
+cd ~/projects/my-app
+~/.engineering-agent/scripts/start-ticket HYP-123 --title "Add CSV export"
+code ../worktrees/HYP-123        # or open the folder in your Kilo Code host
+```
+
+In Kilo Code, in that window:
 
 ```text
-/engineer.md Add CSV export to the invoice list (ticket INV-142)
-/plan.md     Migrate the settings page to the new form library
-/review.md
-/test.md
-/debug.md    tests/invoices/export.test.ts fails with "TypeError: rows is not iterable"
+Implement Jira ticket HYP-123. Follow the engineering-agent workflow.
+<paste the ticket description>
 ```
 
-Kilo Code workflow invocation includes the file extension in some versions (`/engineer.md`) and not in others. Use whatever your version's command palette shows.
+One VS Code window (or Kilo CLI session) per worktree gives each ticket its own agent session.
 
 ## Modes
 
-Kilo Code modes restrict which tools are available. Recommended pairing:
-
-| Command | Mode |
+| Phase | Suggested mode |
 |---|---|
-| `/plan`, `/review`, investigation tasks | Architect or Ask (read-only) |
-| `/engineer`, `/test`, `/debug` | Code |
+| Analyze, plan, investigation tickets, reviewing others' work | Architect / Ask (read-only) |
+| Implement, validate, self-review, finish | Code |
 
-`/plan` and `/review` already forbid edits in their text; a read-only mode enforces it. Custom modes (`.kilocodemodes` / global custom modes) can bundle the contract into a dedicated "Engineer" mode if preferred, but rules + workflows are sufficient.
-
-## Project-specific rules
-
-Kilo Code loads the project's `AGENTS.md` and `.kilocode/rules/` in addition to global rules. Project rules override the generic contract except its safety rules (`core/AGENTS.md`, "Instruction precedence"). Nothing needs to be added to the target repository.
+The documents already forbid edits where appropriate; a read-only mode enforces it. You may create a custom "Engineer" mode, but rules alone are sufficient.
 
 ## Limitations
 
-- Global rules are always loaded and consume context on every task. `core/AGENTS.md` is kept compact for this reason; the detailed skill files load only when needed.
-- If your Kilo Code version does not support skills, add a line to the root rule file: `Skill files: <EA>/core/skills/software-engineering/ — read the relevant phase file before each phase.`
-- Workflows run inside the current mode; switch to a read-only mode yourself for `/plan` and `/review` if you want enforcement rather than instruction.
+- Kilo Code must be allowed to read outside the opened worktree: `EA_HOME` and `<main worktree>/.work/`. If file access is restricted to the workspace, add both folders to the VS Code workspace (File → Add Folder to Workspace) or approve the reads.
+- Global rules are loaded in every session; `AGENTS.md` is kept compact for this reason.
+- Kilo Code's own auto-approve settings decide whether commands run without confirmation. Keep approval on for git commands that write (commit, push) if you want the "never push unless asked" rule enforced by the tool as well.
 
 ## Verify
 
-See "Verifying any installation" in [`providers/README.md`](../README.md).
+See "Verify an installation" in [`providers/README.md`](../README.md).

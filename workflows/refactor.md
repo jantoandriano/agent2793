@@ -1,27 +1,30 @@
 # Workflow: Refactor
 
-For structural changes that must not change behavior: renaming, extracting, moving, simplifying, replacing an internal implementation.
+For `ticket.type: refactor` — structural change with **no behavior change**. Follow `workflows/ticket.md`, with these additions.
 
-```text
-Understand → Clarify → Investigate → Establish safety net → Plan → Implement (small steps, test after each)
-  → Review → Validate → Complete
-```
+## Analyze
 
-## Steps
+- Define the boundary precisely: what will be restructured and what will not.
+- Find every caller and consumer, including dynamic references search may miss (string-based lookups, reflection, config, templates, other packages in a monorepo).
+- Refactors touch many files, so dependency analysis matters more: check every active ticket for overlap. A refactor overlapping another active ticket is usually `CONFLICTING` — ask for ordering.
 
-1. **Understand** — the structural goal and why (`requirements.md`). Define the boundary: exactly what will be refactored and what will not.
-2. **Clarify** — if the refactor touches public APIs, shared code, or many callers, confirm the scope with the human.
-3. **Investigate** — find every caller and consumer of the code being changed, including dynamic references (reflection, string-based lookup, config, templates) that search may miss (`investigation.md`).
-4. **Establish a safety net** — run the existing tests for the affected code and record the result. If coverage of the current behavior is weak, add characterization tests that pin the *current* behavior before changing anything (`testing.md`).
-5. **Plan** — sequence the refactor into small steps, each of which leaves the code compiling and tests passing (`planning.md`).
-6. **Implement in small steps** — after each step, run the safety-net tests. If a test fails, the step changed behavior: undo or fix the step before continuing (`implementation.md`, `debugging.md`).
-7. **Review** — confirm the diff contains only structural changes. Any behavior change is a finding (`code-review.md`).
-8. **Validate** — full applicable validation, including typecheck and build, since refactors often break distant consumers (`testing.md`).
-9. **Complete** — final report stating explicitly that behavior is preserved and what evidence supports that (`completion.md`).
+## Establish a safety net
 
-## Refactor-specific rules
+Before changing anything, run the tests covering the affected code and record the baseline. If coverage of current behavior is weak, add characterization tests that pin the *current* behavior (including current quirks) first.
 
-- **Behavior preservation is the requirement.** Existing tests must pass without modification, except tests that reference renamed or moved internals; those changes must be mechanical.
-- **Do not mix refactoring with behavior changes or bug fixes.** If you find a bug, report it; fix it separately unless the human asks to combine them.
-- **Scope control.** Refactor only what the task names. Do not "clean up" adjacent code.
-- **Backwards compatibility.** For public APIs, keep the old name/signature as a deprecated alias or confirm a breaking change with the human.
+## Plan
+
+Sequence the refactor into small steps, each leaving the code compiling and tests passing. Public API changes keep the old name/signature as a deprecated alias unless the human approves a breaking change.
+
+## Implement
+
+- After each step, run the safety-net tests. A failure means the step changed behavior — fix or undo that step before continuing.
+- Do not mix in bug fixes or behavior changes. Bugs found during the refactor become follow-ups (or a separate ticket), unless the human says otherwise.
+- Do not refactor adjacent code outside the boundary.
+
+## Validate and review focus
+
+- Existing tests pass **without modification**, except mechanical updates for renamed/moved internals.
+- Full typecheck and build: refactors break distant consumers.
+- The diff contains only structural changes; any behavior change is a finding.
+- The report states that behavior is preserved and what evidence supports it.

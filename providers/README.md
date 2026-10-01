@@ -1,59 +1,63 @@
 # Provider Adapters
 
-The core (`core/`, `commands/`, `workflows/`, `templates/`) is provider-neutral. An adapter documents how to load it into one specific coding agent. Provider-specific details belong here and nowhere else.
+Everything outside `providers/` is tool-neutral Markdown. An adapter explains how to make one AI coding tool load it. Provider-specific details live here and nowhere else.
 
-| Provider | Adapter | Status |
-|---|---|---|
-| Kilo Code | [`kilo-code/`](kilo-code/README.md) | First target |
-| Claude Code | [`claude-code/`](claude-code/README.md) | Documented |
-| Codex | [`codex/`](codex/README.md) | Documented |
+| Provider | Adapter |
+|---|---|
+| Kilo Code (first target) | [`kilo-code/`](kilo-code/README.md) |
+| Claude Code | [`claude-code/`](claude-code/README.md) |
+| Codex | [`codex/`](codex/README.md) |
+| Cursor and others | See "Any other agent" below |
 
-Provider features change often. Each adapter lists the mechanisms it relies on; check them against the provider's current documentation when installing.
+Provider features change often. Each adapter names the mechanism it relies on; confirm it against the provider's current documentation when installing.
 
-## What every adapter must map
+## What an adapter must achieve
 
-| Engineering Agent piece | Purpose | Typical provider mechanism |
-|---|---|---|
-| `core/AGENTS.md` | Always-on behavioral contract | Global/user instruction file or always-applied rules |
-| `core/skills/software-engineering/` | Detailed phase guidance, loaded on demand | Skills directory (`SKILL.md` with `name`/`description` frontmatter), or rule files |
-| `commands/*.md` | User-invoked entry points (`/engineer`, `/plan`, ...) | Custom slash commands, prompts, or workflows |
-| `workflows/`, `templates/` | Referenced by commands and skill files | Read from the Engineering Agent root at runtime |
-| Engineering Agent root | Lets the agent resolve paths like `workflows/bugfix.md` | Stated in the installed instruction file |
-| Project `AGENTS.md` / rules | Project-specific overrides | Provider's normal project instruction loading — unchanged |
+1. **`AGENTS.md` is always loaded** — through the tool's global (user-level) instruction mechanism, so every session in every repository gets it without modifying the repositories.
+2. **The agent knows `EA_HOME`** — a line such as `Engineering Agent root: ~/.engineering-agent` next to the instructions, so the agent can open `rules/`, `ticket/`, `workflows/`, and `templates/` on demand. (`ticket.md` also records it, as `workspace.engineering_agent`.)
+3. **Project instructions still load** — the tool's normal project instruction files (`AGENTS.md`, rule directories) keep working, so project rules can override generic ones (`AGENTS.md` §3).
+4. **The agent can read files outside the worktree** — it must read `EA_HOME` and the context directory in the main worktree. If the tool sandboxes reads to the open folder, allow these two locations.
+
+Only `AGENTS.md` is loaded up front; everything else is read when the phase needs it. This keeps the always-on context small.
 
 ## Installation pattern
 
-1. Clone the repository to a stable location, the **Engineering Agent root**. Recommended: `~/.engineering-agent`.
-2. Make `core/AGENTS.md` always loaded at user/global level, and tell the agent where the root is, e.g. add:
-   ```text
-   Engineering Agent root: ~/.engineering-agent
-   ```
-3. Expose `core/skills/software-engineering/` through the provider's skill mechanism. Prefer a symlink over a copy so `git pull` in the root updates it.
-4. Expose each file in `commands/` through the provider's command mechanism. Rename on collision with built-in commands (for example `ea-review`).
-5. Leave project instructions where the project keeps them. The target repository does not need to know which provider or adapter is in use.
-
-Installing at user/global level keeps target repositories untouched. Installing at project level (committing the files into a repository) is possible but couples that repository to a provider; prefer it only when a team agrees to it.
-
-## Writing a new adapter
-
-Create `providers/<provider>/README.md` covering:
-
-1. **Mapping** — how each row of the table above maps to the provider.
-2. **Installation** — exact paths and commands, user-level and (optionally) project-level.
-3. **Skills** — how the skill is discovered and loaded; fallback if the provider has no skill mechanism (e.g. reference the files from the instruction file and let the agent read them on demand).
-4. **Commands** — how commands are invoked, how arguments are passed, and name collisions.
-5. **Project rules** — which project instruction files the provider reads and in what order, so the precedence in `core/AGENTS.md` holds.
-6. **Limitations** — anything the provider cannot do (no read-only mode, instruction size limits, no skill loading) and the workaround.
-7. **Verification** — a short prompt that proves the installation works.
-
-Do not modify core files to suit one provider. If the core needs a change to be portable, change it in provider-neutral terms.
-
-## Verifying any installation
-
-In a test repository with an uncommitted change, ask the agent:
-
-```text
-/plan Add a --verbose flag to the CLI
+```sh
+git clone <engineering-agent-repo-url> ~/.engineering-agent
 ```
 
-Expected: it runs `git status` and notes the existing change, identifies the project's conventions and validation commands, produces a plan in the `templates/task-plan.md` shape, and modifies no files.
+Then follow the adapter for your tool. Optionally put the scripts on your `PATH`:
+
+```sh
+export PATH="$HOME/.engineering-agent/scripts:$PATH"   # start-ticket, finish-ticket, create-worktree
+```
+
+On Windows, run the scripts from Git Bash (or WSL).
+
+## Any other agent
+
+For Cursor or any tool with global or project rules:
+
+1. Add a global rule (or, if the tool has none, a project rule kept out of version control) containing:
+   ```text
+   Engineering Agent root: ~/.engineering-agent
+   Read ~/.engineering-agent/AGENTS.md at the start of every task and follow it.
+   ```
+   or include `AGENTS.md` content directly if the tool cannot read files referenced by rules.
+2. Verify as below.
+
+## Verify an installation
+
+In a test repository:
+
+```sh
+start-ticket TEST-1 --title "Add a --verbose flag"
+```
+
+Open the printed worktree in the tool and send:
+
+```text
+Implement ticket TEST-1. Follow the engineering-agent workflow. Stop after the plan.
+```
+
+Expected: the agent checks branch, status, and worktrees; sets `ticket.status` to `ANALYZING`; writes `analysis.md` and `dependency-analysis.md` in `.work/TEST-1/`; writes `plan.md`; and modifies no code.

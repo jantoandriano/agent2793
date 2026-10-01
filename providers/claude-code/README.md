@@ -1,67 +1,49 @@
 # Adapter: Claude Code
 
-> Paths and features below follow Claude Code's documented user-level configuration (`~/.claude/`). Confirm against the current Claude Code documentation when installing.
+> Uses Claude Code's user memory file `~/.claude/CLAUDE.md` and its `@path` import syntax. Confirm against the current Claude Code documentation when installing.
 
 ## Mapping
 
-| Engineering Agent | Claude Code mechanism |
+| Engineering Agent | Claude Code |
 |---|---|
-| `core/AGENTS.md` | User memory `~/.claude/CLAUDE.md`, via an `@` import |
-| `core/skills/software-engineering/` | Skills: `~/.claude/skills/software-engineering/` |
-| `commands/*.md` | Custom slash commands: `~/.claude/commands/` |
-| `workflows/`, `templates/` | Read from the Engineering Agent root |
-| Project rules | Project `CLAUDE.md` (and `@AGENTS.md` imports inside it) — loaded as usual |
+| `AGENTS.md` (always loaded) | `@` import in `~/.claude/CLAUDE.md` |
+| `EA_HOME` | A line in `~/.claude/CLAUDE.md` |
+| `rules/`, `ticket/`, `workflows/`, `templates/` | Read on demand from `EA_HOME` |
+| Project rules | Project `CLAUDE.md` (which can `@AGENTS.md` if the project keeps rules there) |
 
-## Install (user level)
-
-macOS / Linux:
+## Install
 
 ```sh
 git clone <engineering-agent-repo-url> ~/.engineering-agent
-EA=~/.engineering-agent
-
-mkdir -p ~/.claude/skills ~/.claude/commands
-ln -s "$EA/core/skills/software-engineering" ~/.claude/skills/software-engineering
-for f in "$EA"/commands/*.md; do ln -s "$f" ~/.claude/commands/ea-"$(basename "$f")"; done
-
 cat >> ~/.claude/CLAUDE.md <<'EOF'
 
 # Engineering Agent
 Engineering Agent root: ~/.engineering-agent
-@~/.engineering-agent/core/AGENTS.md
+@~/.engineering-agent/AGENTS.md
 EOF
 ```
 
-Windows: same layout under `%USERPROFILE%\.claude\`; create links with `New-Item -ItemType SymbolicLink` (Developer Mode or elevated shell) or copy the files.
+Windows: the same file is `%USERPROFILE%\.claude\CLAUDE.md`.
 
-Commands are installed with an `ea-` prefix because Claude Code ships built-in commands that may share names (for example `/review`). Alternatively, package the repository as a Claude Code plugin, which namespaces commands automatically (`/engineering-agent:review`).
+## Use
 
-## Usage
-
-```text
-/ea-engineer Add CSV export to the invoice list (ticket INV-142)
-/ea-plan     Migrate the settings page to the new form library
-/ea-review
-/ea-test
-/ea-debug    tests/invoices/export.test.ts fails with "TypeError: rows is not iterable"
+```sh
+~/.engineering-agent/scripts/start-ticket HYP-123 --title "Add CSV export"
+cd ../worktrees/HYP-123 && claude
 ```
 
-The text after the command is passed as the command's input. If your version requires an explicit placeholder, append `$ARGUMENTS` to the end of each installed command file (copy instead of symlink in that case).
+```text
+Implement Jira ticket HYP-123. Follow the engineering-agent workflow.
+<paste the ticket description>
+```
 
-## Read-only commands
-
-Use plan mode for `/ea-plan` and `/ea-review` to enforce the no-edit constraint. Permission settings can additionally restrict tools.
-
-## Project-specific rules
-
-Claude Code reads the project's `CLAUDE.md`, not `AGENTS.md`. For projects that keep their rules in `AGENTS.md`, the project's `CLAUDE.md` can contain `@AGENTS.md`. Project instructions override the generic contract except its safety rules (`core/AGENTS.md`, "Instruction precedence"). The Engineering Agent installation does not require changes to the target repository.
+Run one `claude` session per worktree for parallel tickets. Plan mode is a good fit for the analyze and plan phases and for investigation tickets.
 
 ## Limitations
 
-- The imported `core/AGENTS.md` is loaded into every session; skill files load on demand.
-- Skills are selected by their `description`. If the skill is not picked up for a task, ask for it explicitly ("use the software-engineering skill") or invoke a command, which references it directly.
-- Built-in Claude Code behaviors (its own git and commit guidance, built-in review commands) coexist with this contract. Where they differ, the more conservative rule should win; the safety rules in `core/AGENTS.md` are compatible with Claude Code's defaults.
+- Claude Code asks permission for reads outside the working directory. Approve reads of `EA_HOME` and `<main worktree>/.work/`, or add them as additional directories (`--add-dir` or the `additionalDirectories` setting).
+- Claude Code's built-in git and commit guidance coexists with these rules; where they differ, the more conservative rule applies.
 
 ## Verify
 
-See "Verifying any installation" in [`providers/README.md`](../README.md).
+See "Verify an installation" in [`providers/README.md`](../README.md).
