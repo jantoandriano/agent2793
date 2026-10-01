@@ -35,6 +35,7 @@ ls "$main/.work/HYP-123/"
 ├── review.md                   self-review findings                             — ticket/review.md
 ├── implementation-report.md    final report                                     — ticket/finish.md
 ├── tracker-comment.md          comment for the issue tracker ticket             — ticket/finish.md
+├── pr-feedback.md              PR review feedback, one section per round        — ticket/pr-feedback.md
 └── logs/                       validation command output (finish-ticket)
 
 .work/local-files               optional: untracked files to copy into new worktrees (see below)
@@ -67,6 +68,9 @@ YAML header, then a Markdown body (description, acceptance criteria, constraints
 | `checkpoint.plan_approved` | `true` · `false` | agent, after human approval |
 | `tracker.comment` | `ask` · `auto` · `off` — end-of-ticket comment in the issue tracker (`ticket/finish.md` §4) | start-ticket (`--tracker-comment`, `EA_TRACKER_COMMENT`, default `ask`) / human |
 | `tracker.comment_posted` | date + link/ID of the posted comment | agent |
+| `pr.url`, `pr.number` | the ticket's pull request | agent (when it opens the PR or finds it) / human |
+| `pr.respond` | `ask` · `auto` · `off` — pushing fixes and replying to PR feedback (`ticket/pr-feedback.md`) | start-ticket (`--pr-respond`, `EA_PR_RESPOND`, default `ask`) / human |
+| `pr.feedback_handled_at` | GitHub timestamp of the newest feedback item handled; `scripts/check-prs` counts items after it | agent |
 | `validation.*` (`typecheck`, `lint`, `tests`, `build`) | `pending` · `pass` · `fail` · `not-run` · `not-applicable` | agent (validate) |
 
 Edit the header in place; keep it valid YAML. Append to Status History on every status change: `- 2026-10-01 IN_PROGRESS — plan approved`.

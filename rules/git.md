@@ -71,7 +71,8 @@ Or read original files with `git show <base>:<path>`.
 ## Commits, pushes, PRs
 
 - Do not commit unless the human or project rules ask you to. If you commit, commit only on your ticket branch, only your changes, following the project's commit message convention, and reference the ticket ID.
-- Never push, merge, or open a PR unless explicitly asked. (Commenting on the tracker ticket is covered by `ticket/finish.md` §4.)
+- Never push, merge, or open a PR unless explicitly asked. (Commenting on the tracker ticket: `ticket/finish.md` §4. Opening the PR when asked: `ticket/finish.md` §5. Pushing fixes for PR feedback: `ticket/pr-feedback.md`.)
+- Never force-push, and never rebase or amend commits that are already pushed.
 
 ## Before declaring completion
 

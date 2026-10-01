@@ -66,10 +66,22 @@ Leave a comment on the ticket in the issue tracker (e.g. Jira) saying what was d
 
 If `tracker.comment_posted` is already set (the ticket was finished before and came back), post a new comment only when something changed since, and say in it that it updates the earlier one. Never edit or delete existing comments.
 
-## After the agent is done (human)
+## 5. Opening the PR (only when asked)
 
-- Commit (if not already), push, and open the PR — the agent does these only when explicitly asked.
-- After merge: set `ticket.status: DONE`, then clean up:
+Commit, push, and open the PR only when the human asks. When asked:
+
+1. Commit the ticket's changes on the ticket branch (project commit convention, ticket ID in the message).
+2. `git push -u origin <ticket branch>` — only this branch.
+3. Open the PR with the project's PR template if one exists (`gh pr create`, or a GitHub MCP tool). Base it on `workspace.base`. The description summarizes the implementation report: what changed, how it was verified, what was not verified, known limitations.
+4. Record `pr.url` and `pr.number` in `ticket.md`, set `ticket.status: IN_REVIEW`, append to Status History.
+
+## After the PR is open
+
+Review comments and requested changes are handled in the same ticket session with `ticket/pr-feedback.md`, when the human asks ("Address PR feedback for HYP-123"). `scripts/check-prs` shows which tickets have new feedback.
+
+## After merge (human)
+
+- Set `ticket.status: DONE`, then clean up:
 
   ```bash
   git worktree remove ../worktrees/HYP-123

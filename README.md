@@ -2,7 +2,7 @@
 
 A reusable engineering operating system for AI coding agents.
 
-agent2793 is **not an application and not a coding agent**. It is a set of plain Markdown instructions plus three small shell scripts that make AI coding agents (Kilo Code, Claude Code, Cursor, Codex, ...) work tickets the way a careful engineer does — and let several of them work on the same repository at the same time without stepping on each other.
+agent2793 is **not an application and not a coding agent**. It is a set of plain Markdown instructions plus four small shell scripts that make AI coding agents (Kilo Code, Claude Code, Cursor, Codex, ...) work tickets the way a careful engineer does — and let several of them work on the same repository at the same time without stepping on each other.
 
 ```text
 Reusable instructions + ticket workflow + git worktree isolation + ticket context
@@ -52,7 +52,7 @@ To start a ticket from chat (in the main checkout):
 Start ticket HYP-123 "Add CSV export" with agent2793 (D:/Projects/agent2793/SETUP.md, section B).
 ```
 
-The agent runs `start-ticket` and tells you the worktree path; you then start a Kilo session in that worktree and give it the ticket (steps 2–3 below). To check readiness: `Check if ticket HYP-123 is ready (D:/Projects/agent2793/SETUP.md, section C).`
+The agent runs `start-ticket` and tells you the worktree path; you then start a Kilo session in that worktree and give it the ticket (steps 2–3 below). To check readiness: `Check if ticket HYP-123 is ready (D:/Projects/agent2793/SETUP.md, section C).` To see which PRs have new review feedback: `Check my PRs (D:/Projects/agent2793/SETUP.md, section D).`
 
 [`SETUP.md`](SETUP.md) holds the agent's instructions for all three.
 
@@ -150,9 +150,31 @@ Verifies git state, runs the validation it can detect, scans the diff for debug 
 
 **6. Review** `.work/HYP-123/implementation-report.md` — it separates **Implemented**, **Verified**, **Not verified**, **Known issues**, and **Suggested follow-ups** — and the diff.
 
-**7. Commit, push, and open the PR yourself.** The agent does this only when explicitly asked.
+**7. Open the PR** — yourself, or tell the agent in the ticket's session: "Open the PR for HYP-123". The agent commits, pushes only the ticket branch, opens the PR, records its link in `ticket.md`, and sets status `IN_REVIEW`. It never does this unprompted.
 
-**8. Clean up after merge**
+**8. Handle review feedback** — agents are not notified when someone comments on the PR or requests changes. Check, then tell the right session:
+
+```bash
+check-prs
+```
+
+```text
+TICKET     STATUS        PR      STATE    REVIEW             NEW FEEDBACK
+HYP-123    IN_REVIEW     #42     OPEN     CHANGES_REQUESTED  3 new since 2026-10-01T12:00:00Z
+  → in the HYP-123 session: "Address PR feedback for HYP-123"  (https://github.com/.../pull/42)
+```
+
+In that ticket's session:
+
+```text
+Address PR feedback for HYP-123.
+```
+
+The agent fetches the reviews and comments, classifies each (required change, suggestion, question, disagreement, out of scope), asks you about disagreements, fixes the accepted items with the normal implement → validate → self-review loop, then pushes new commits and replies to each comment. By default it shows you the pushes and replies first; set `--pr-respond auto|ask|off` on `start-ticket` (or `EA_PR_RESPOND`) to change that. It never force-pushes, resolves threads, or merges. Each round is recorded in `.work/HYP-123/pr-feedback.md`; repeat for every new review.
+
+`check-prs` needs the GitHub CLI (`gh`) logged in. Agent replies carry a hidden `<!-- agent2793 -->` marker so they are not counted as new feedback; your own comments are.
+
+**9. Clean up after merge**
 
 ```bash
 git worktree remove ../worktrees/HYP-123
@@ -227,9 +249,10 @@ Worktrees isolate files, not the machine: dependency installs are per worktree, 
 ## Ticket lifecycle
 
 ```text
-TODO → ANALYZING → PLANNED → READY → IN_PROGRESS → VALIDATING → REVIEWING → READY_FOR_PR → DONE
-                                         ↑               │            │
-                                         └───────────────┴────────────┘   failures and findings loop back
+TODO → ANALYZING → PLANNED → READY → IN_PROGRESS → VALIDATING → REVIEWING → READY_FOR_PR → IN_REVIEW → DONE
+                                         ↑               │            │                         │
+                                         └───────────────┴────────────┴─────────────────────────┘
+                                           failures, findings, and PR feedback loop back
 BLOCKED (any time, with reason)    CANCELLED (human)
 ```
 
@@ -276,6 +299,7 @@ The agent uses exactly these. Safety rules — never touch another ticket's work
 | `create-worktree <ID>` | Creates or reuses branch `<prefix>/<ID>` and worktree `../worktrees/<ID>`; refuses if the branch is checked out elsewhere |
 | `start-ticket <ID>` | `create-worktree` + `.work/<ID>/ticket.md` + git exclude + copies files listed in `.work/local-files` + list of other active tickets + what to open |
 | `finish-ticket [ID]` | Git checks, detected validation, diff scan, `validation.md`, report draft, readiness verdict (exit 0 ready, 2 not ready) |
+| `check-prs [--all]` | For each ticket: its PR, review decision, and count of review feedback not yet handled; says which session to tell what. Read-only; needs `gh` |
 
 All support `--help`. Bash; on Windows run them from Git Bash or WSL. They never commit, push, merge, or touch other tickets' worktrees.
 

@@ -141,3 +141,15 @@ bash <EA_HOME>/scripts/finish-ticket <ID>
 ```
 
 Report the result and blockers. Do not commit, push, or change `ticket.status` unless asked.
+
+## D. PR review feedback
+
+**"Check my PRs" / "Which tickets have PR feedback?"** (any session of the project):
+
+```bash
+bash <EA_HOME>/scripts/check-prs
+```
+
+Report the table and the suggested actions. Read-only.
+
+**"Address PR feedback for HYP-123"** — must run in that ticket's session (its worktree). If you are in the main worktree or another ticket's worktree, tell the human which session to use and stop. Otherwise follow `ticket/pr-feedback.md`.

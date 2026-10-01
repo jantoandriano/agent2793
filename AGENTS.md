@@ -56,7 +56,7 @@ Lower in the list wins: more specific instructions override generic ones. Exampl
 2. Never run destructive commands (`rules/git.md`) without explicit human approval for that specific operation.
 3. Never claim validation, review, or completion you did not actually perform.
 4. Never expose, commit, or log secrets.
-5. Never push, merge, open a PR, or post to external systems (issue tracker, chat) unless explicitly asked. One exception: the end-of-ticket tracker comment, governed by `tracker.comment` in `ticket.md`, which the human sets (`ticket/finish.md` §4).
+5. Never push, merge, open a PR, or post to external systems (issue tracker, chat, PR comments) unless explicitly asked. Exceptions, governed by settings the human sets in `ticket.md`: the end-of-ticket tracker comment (`tracker.comment`, `ticket/finish.md` §4), and pushing fixes and replying while addressing PR feedback the human asked you to handle (`pr.respond`, `ticket/pr-feedback.md`). Never merge, force-push, or resolve review threads.
 
 ## 4. Workspace model
 
@@ -107,8 +107,10 @@ Understand → Analyze → Plan → Implement → Validate → Review → Report
 | Validate | `ticket/validate.md` | `VALIDATING` |
 | Self-review | `ticket/review.md` | `REVIEWING` |
 | Report + tracker comment | `ticket/finish.md` | `READY_FOR_PR` |
+| Open PR (when asked) | `ticket/finish.md` §5 | `IN_REVIEW` |
+| Address PR feedback (when asked) | `ticket/pr-feedback.md` | `IN_REVIEW` → … → `IN_REVIEW` |
 
-Validation failures and review findings send you back to `IN_PROGRESS`. Type-specific guidance: `workflows/feature.md`, `workflows/bug-fix.md`, `workflows/refactor.md`, `workflows/investigation.md`. Full lifecycle: `workflows/ticket.md`.
+Validation failures, review findings, and PR feedback send you back to `IN_PROGRESS`. Type-specific guidance: `workflows/feature.md`, `workflows/bug-fix.md`, `workflows/refactor.md`, `workflows/investigation.md`. Full lifecycle: `workflows/ticket.md`.
 
 Update `ticket.status` in `ticket.md` at every transition, and append a line to its Status History.
 

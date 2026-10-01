@@ -24,6 +24,12 @@ Self Review  ────────────────┘
 Implementation Report
   ↓
 Ready for PR
+  ↓  (human asks to open the PR)
+In Review  ──── review comments / changes requested ────┐
+  ↑                                                       │ human asks: "Address PR feedback"
+  └──── fix → validate → self-review → push + reply ─────┘
+  ↓
+Merged → Done
 ```
 
 ## Phases
@@ -40,13 +46,17 @@ Ready for PR
 | Validation | Prove it works with the project's own checks | `ticket/validate.md` | `validation.md` | `VALIDATING` |
 | Self review | Find problems in the real diff | `ticket/review.md` | `review.md` | `REVIEWING` |
 | Implementation report | Honest record: implemented, verified, not verified, issues, follow-ups; comment on the tracker ticket | `ticket/finish.md` | `implementation-report.md`, tracker comment | `READY_FOR_PR` |
+| Open PR | Only when the human asks | `ticket/finish.md` §5 | PR, `pr.url` in `ticket.md` | `IN_REVIEW` |
+| PR feedback | Handle review comments and requested changes, when the human asks | `ticket/pr-feedback.md` | `pr-feedback.md`, commits, replies | `IN_REVIEW` |
 
 Dependency analysis needs the file list from investigation, and investigation benefits from knowing related tickets; in practice both happen during the analyze phase and inform each other.
 
 ## Lifecycle
 
 ```text
-TODO → ANALYZING → PLANNED → READY → IN_PROGRESS → VALIDATING → REVIEWING → READY_FOR_PR → DONE
+TODO → ANALYZING → PLANNED → READY → IN_PROGRESS → VALIDATING → REVIEWING → READY_FOR_PR → IN_REVIEW → DONE
+                                         ↑                                                  │
+                                         └──────────────── PR feedback ─────────────────────┘
 
 BLOCKED     from any state; record blocked_reason; resume at the state it was blocked in
 CANCELLED   set by the human; work stops
@@ -62,6 +72,8 @@ CANCELLED   set by the human; work stops
 | → `VALIDATING` | Agent | Targeted tests pass; full validation running |
 | → `REVIEWING` | Agent | Validation passed |
 | → `READY_FOR_PR` | Agent | Definition in `ticket/finish.md` met |
+| → `IN_REVIEW` | Agent or human | PR opened; or a PR feedback round finished (`ticket/pr-feedback.md`) |
+| `IN_REVIEW` → `IN_PROGRESS` | Agent | Human asked to address PR feedback that needs code changes |
 | → `DONE` | Human | PR merged |
 | → `BLOCKED` | Agent or human | See `AGENTS.md` §9 |
 | → `CANCELLED` | Human | Ticket abandoned |

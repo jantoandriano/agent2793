@@ -5,7 +5,7 @@ ticket:
   id: {{ID}}
   title: "{{TITLE}}"
   type: {{TYPE}}              # feature | bug | refactor | investigation | chore
-  status: TODO                # TODO | ANALYZING | PLANNED | READY | IN_PROGRESS | VALIDATING | REVIEWING | READY_FOR_PR | DONE | BLOCKED | CANCELLED
+  status: TODO                # TODO | ANALYZING | PLANNED | READY | IN_PROGRESS | VALIDATING | REVIEWING | READY_FOR_PR | IN_REVIEW | DONE | BLOCKED | CANCELLED
   blocked_reason: ""
   updated: {{DATE}}
 
@@ -29,6 +29,12 @@ checkpoint:
 tracker:
   comment: {{TRACKER_COMMENT}}   # ask: show the finish comment, post after approval | auto: post without asking | off: never post
   comment_posted: ""          # date and link/ID of the posted comment
+
+pr:
+  url: ""
+  number: ""
+  respond: {{PR_RESPOND}}       # ask: show pushes and replies first | auto: push and reply without asking | off: never push or post
+  feedback_handled_at: ""     # GitHub timestamp of the newest review feedback handled (ticket/pr-feedback.md)
 
 validation:                   # pending | pass | fail | not-run | not-applicable
   typecheck: pending

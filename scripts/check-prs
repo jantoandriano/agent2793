@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# check-prs — list tickets whose pull requests have review feedback the agent has not handled yet.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: check-prs [--all]
+
+For every ticket in .work/ (skipping DONE and CANCELLED unless --all), finds the
+pull request for its branch and counts review feedback newer than
+pr.feedback_handled_at in ticket.md:
+  - reviews with a body, and every "changes requested" review
+  - conversation comments
+  - inline review comments
+Agent replies (containing <!-- agent2793 -->) are not counted.
+
+Then says what to do: address feedback in the ticket's session, wait, or clean up.
+Read-only: changes nothing locally or on GitHub. Requires the GitHub CLI (gh), logged in.
+
+Options:
+  --all        include DONE and CANCELLED tickets
+  -h, --help   show this help
+EOF
+}
+
+all=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --all) all=1; shift ;;
+    -h | --help) usage; exit 0 ;;
+    *) ea_die "unexpected argument '$1' (see --help)" ;;
+  esac
+done
+
+ea_require_git_repo
+command -v gh >/dev/null || ea_die "GitHub CLI 'gh' not found (https://cli.github.com)"
+gh auth status >/dev/null 2>&1 || ea_die "gh is not logged in (run: gh auth login)"
+main=$(ea_main_worktree)
+cd "$main" || exit 1
+
+marker='<!-- agent2793 -->'
+not_agent="(.body // \"\" | contains(\"$marker\") | not)"
+reviews_jq="(.reviews[] | select(.state != \"PENDING\") | select((.body // \"\") != \"\" or .state == \"CHANGES_REQUESTED\") | select($not_agent) | .submittedAt), (.comments[] | select($not_agent) | .createdAt)"
+inline_jq=".[] | select($not_agent) | .created_at"
+
+shopt -s nullglob
+tickets=(.work/*/ticket.md)
+[[ ${#tickets[@]} -gt 0 ]] || { echo "No tickets in $main/.work/"; exit 0; }
+
+printf '%-10s %-13s %-7s %-8s %-18s %s\n' TICKET STATUS PR STATE REVIEW "NEW FEEDBACK"
+for f in "${tickets[@]}"; do
+  id=$(ea_ticket_field "$f" id)
+  status=$(ea_ticket_field "$f" status)
+  branch=$(ea_ticket_field "$f" branch)
+  handled=$(ea_ticket_field "$f" feedback_handled_at)
+  case "$status" in DONE | CANCELLED) [[ $all -eq 1 ]] || continue ;; esac
+
+  pr=$(gh pr list --head "$branch" --state all --limit 1 --json number,url,state,reviewDecision \
+    --jq '.[0] // empty | [.number, .url, .state, (.reviewDecision // "-")] | @tsv' 2>/dev/null)
+  if [[ -z "$pr" ]]; then
+    printf '%-10s %-13s %-7s %-8s %-18s %s\n' "$id" "$status" - - - -
+    echo "  → no PR for $branch"
+    continue
+  fi
+  IFS=$'\t' read -r number url state decision <<<"$pr"
+
+  times=$(
+    gh pr view "$number" --json reviews,comments --jq "$reviews_jq" 2>/dev/null
+    gh api "repos/{owner}/{repo}/pulls/$number/comments" --paginate --jq "$inline_jq" 2>/dev/null
+  )
+  new=0
+  while IFS= read -r t; do
+    [[ -n "$t" ]] || continue
+    if [[ -z "$handled" || "$t" > "$handled" ]]; then new=$((new + 1)); fi
+  done <<<"$times"
+
+  if [[ $new -gt 0 ]]; then
+    since=${handled:+ since $handled}
+    feedback="$new new${since}"
+  else
+    feedback="none"
+  fi
+  printf '%-10s %-13s %-7s %-8s %-18s %s\n' "$id" "$status" "#$number" "$state" "$decision" "$feedback"
+
+  case "$state" in
+    MERGED)
+      if [[ "$status" == "DONE" ]]; then
+        echo "  → merged ($url)"
+      else
+        echo "  → merged: set status DONE in ticket.md and clean up the worktree ($url)"
+      fi
+      ;;
+    CLOSED) echo "  → closed without merge: decide whether to cancel or reopen ($url)" ;;
+    *)
+      if [[ $new -gt 0 ]]; then
+        echo "  → in the $id session: \"Address PR feedback for $id\"  ($url)"
+      elif [[ "$decision" == "APPROVED" ]]; then
+        echo "  → approved, no unhandled feedback: ready to merge ($url)"
+      else
+        echo "  → waiting for review ($url)"
+      fi
+      ;;
+  esac
+done
