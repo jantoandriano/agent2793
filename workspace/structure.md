@@ -99,7 +99,7 @@ Copies are independent: later edits in the main worktree do not propagate to exi
 
 ## Project validation override
 
-If automatic detection in `scripts/finish-ticket` does not fit a project, the project may commit `.engineering-agent/validation`:
+If automatic detection in `scripts/finish-ticket` does not fit a project, the project may commit `.agent2793/validation`:
 
 ```text
 # name: command      (run from the worktree root, in order)

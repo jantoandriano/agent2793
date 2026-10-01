@@ -21,7 +21,7 @@ Options:
   -h, --help        show this help
 
 Validation commands, in order of precedence:
-  .engineering-agent/validation in the repository  (lines "name: command")
+  .agent2793/validation in the repository  (lines "name: command")
   package.json scripts   typecheck, lint, format:check, test, build
   Makefile targets       typecheck, lint, test, build
   go.mod                 go vet ./..., go test ./..., go build ./...
@@ -122,7 +122,7 @@ names=() cmds=() results=() notes=()
 add_check() { names+=("$1"); cmds+=("$2"); results+=("${3:-}"); notes+=("${4:-}"); }
 
 detect_checks() {
-  local override=".engineering-agent/validation"
+  local override=".agent2793/validation"
   if [[ -f "$override" ]]; then
     local line
     while IFS= read -r line || [[ -n "$line" ]]; do
@@ -208,7 +208,7 @@ for i in "${!names[@]}"; do
 done
 
 if [[ ${#names[@]} -eq 0 ]]; then
-  blockers+=("no validation commands detected — add .engineering-agent/validation or validate manually")
+  blockers+=("no validation commands detected — add .agent2793/validation or validate manually")
 elif [[ $validate -eq 0 ]]; then
   blockers+=("validation skipped (--no-validate)")
 else

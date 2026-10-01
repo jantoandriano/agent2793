@@ -1,8 +1,8 @@
-# Engineering Agent
+# agent2793
 
 A reusable engineering operating system for AI coding agents.
 
-Engineering Agent is **not an application and not a coding agent**. It is a set of plain Markdown instructions plus three small shell scripts that make AI coding agents (Kilo Code, Claude Code, Cursor, Codex, ...) work tickets the way a careful engineer does — and let several of them work on the same repository at the same time without stepping on each other.
+agent2793 is **not an application and not a coding agent**. It is a set of plain Markdown instructions plus three small shell scripts that make AI coding agents (Kilo Code, Claude Code, Cursor, Codex, ...) work tickets the way a careful engineer does — and let several of them work on the same repository at the same time without stepping on each other.
 
 ```text
 Reusable instructions + ticket workflow + git worktree isolation + ticket context
@@ -32,132 +32,127 @@ scripts/               create-worktree, start-ticket, finish-ticket
 providers/             how to load this into Kilo Code, Claude Code, Codex, others
 ```
 
-## Walkthrough
+## Using agent2793 in your projects
 
-### 1. Install Engineering Agent
+The examples use Kilo Code, agent2793 at `D:/Projects/agent2793`, and an application at `D:/Projects/my-app`. Run commands in Git Bash (or any bash on macOS/Linux). Other tools: [`providers/`](providers/README.md).
 
-```sh
-git clone <engineering-agent-repo-url> ~/.engineering-agent
-export PATH="$HOME/.engineering-agent/scripts:$PATH"     # optional; Windows: use Git Bash
+### Once per machine (optional)
+
+Put the scripts on your `PATH` (`~/.bashrc`) so you can type `start-ticket` instead of the full path:
+
+```bash
+export PATH="/d/Projects/agent2793/scripts:$PATH"
 ```
 
-### 2. Load the instructions into your AI coding tool (once)
+### Once per project
 
-Make your tool load `AGENTS.md`, either globally or per project. For Kilo Code, per project and without committing anything — in the application repository's main checkout:
+In the project's main checkout:
 
-```jsonc
-// .kilo/kilo.jsonc  (local, not committed)
+```bash
+cd /d/Projects/my-app
+mkdir -p .kilo .work
+
+cat > .kilo/kilo.jsonc <<'EOF'
 {
   "$schema": "https://app.kilo.ai/config.json",
-  "instructions": ["/home/me/.engineering-agent/AGENTS.md"],
+  "instructions": ["D:/Projects/agent2793/AGENTS.md"],
   "permission": { "external_directory": "ask" }
 }
+EOF
+
+echo ".kilo/kilo.jsonc" >> .work/local-files
 ```
 
-```sh
-mkdir -p .work && echo ".kilo/kilo.jsonc" >> .work/local-files    # start-ticket copies it into every ticket worktree
+- `instructions` makes Kilo load the agent2793 contract in this project.
+- `external_directory: "ask"` lets the agent read agent2793's files and `.work/`, which are outside the ticket worktree (Kilo prompts first; use `"allow"` to skip prompts).
+- `.work/local-files` makes `start-ticket` copy the uncommitted `.kilo/kilo.jsonc` into every ticket worktree — a new worktree contains only committed files.
+- Nothing here is committed. Keep `.kilo/` out of git through your global gitignore or `.git/info/exclude`; `start-ticket` excludes `.work/` automatically.
+
+Optional, committed to the project:
+
+- **`AGENTS.md`** — project rules that override the generic ones, e.g. "Use pnpm. Biome, not ESLint. Tests: Vitest. Validate with `pnpm check`."
+- **`.agent2793/validation`** — the exact checks `finish-ticket` should run, one `name: command` per line, only if automatic detection gets them wrong (see [`workspace/structure.md`](workspace/structure.md#project-validation-override)).
+
+### For each ticket
+
+**1. Create the workspace**
+
+```bash
+cd /d/Projects/my-app
+start-ticket HYP-123 --title "Add CSV export"     # --type bug|refactor|investigation|chore
 ```
 
-Or load it globally via `~/.config/kilo/kilo.jsonc`. Details and other tools: [`providers/`](providers/README.md).
+This creates branch `feature/HYP-123`, worktree `D:/Projects/worktrees/HYP-123`, and ticket context `.work/HYP-123/ticket.md`, copies the files listed in `.work/local-files`, and lists other active tickets.
 
-### 3. Create the ticket workspace and worktree
+**2. Open the worktree in its own window**
 
-From inside your application repository:
-
-```sh
-cd ~/projects/my-app
-start-ticket HYP-123 --title "Add CSV export to invoice list"
+```bash
+code D:/Projects/worktrees/HYP-123
 ```
+
+One window per worktree = one Kilo session per ticket. Never point two sessions at the same worktree.
+
+**3. Give Kilo the ticket**
 
 ```text
-Starting HYP-123...
+Implement Jira ticket HYP-123. Follow the agent2793 workflow.
 
-Preparing worktree (new branch 'feature/HYP-123')
-Created worktree /home/me/projects/worktrees/HYP-123 on branch feature/HYP-123
-
-Branch:
-feature/HYP-123
-
-Base:
-main
-
-Worktree:
-/home/me/projects/worktrees/HYP-123
-
-Context:
-/home/me/projects/my-app/.work/HYP-123/ticket.md
-
-Ready to open in your AI coding agent (e.g. Kilo Code):
-  /home/me/projects/worktrees/HYP-123
+<paste the ticket description>
 ```
 
-This created the branch, the worktree at `../worktrees/HYP-123`, the context directory `.work/HYP-123/` with `ticket.md`, and excluded `.work/` from git. Use `--type bug|refactor|investigation|chore` for other ticket types, and `--base <branch>` to build on another ticket's unmerged branch.
-
-Without the script:
-
-```sh
-git worktree add ../worktrees/HYP-123 -b feature/HYP-123 main
-mkdir -p .work/HYP-123 && cp ~/.engineering-agent/templates/ticket.md .work/HYP-123/   # fill in placeholders
-```
-
-### 4. Open the worktree in Kilo Code
-
-Open `../worktrees/HYP-123` as its own window. Never point two sessions at the same worktree.
-
-### 5. Instructions load automatically
-
-Kilo Code loads `AGENTS.md` from global rules, plus your project's own `AGENTS.md`/rules. The agent reads the relevant `rules/`, `ticket/`, and `workflows/` files from the Engineering Agent root as it goes.
-
-### 6. Give the agent the ticket
-
-```text
-Implement Jira ticket HYP-123. Follow the engineering-agent workflow.
-
-Add CSV export to the invoice list.
-- Export button on /invoices
-- Columns: number, customer, date, total
-- Empty list exports the header only
-```
-
-### 7. The agent executes the workflow
+**4. Let the agent work**
 
 ```text
 analyze   verify branch/worktree → understand ticket → investigate codebase
           → dependency analysis (ISOLATED / RELATED / BLOCKED / CONFLICTING)
 plan      plan.md: files, approach, tests, validation commands, risks
-          → human checkpoint if triggered (API change, migration, security, ...)
+          → pauses for your approval if a checkpoint applies (API change, migration, security, scope)
 implement smallest correct change + tests; root-cause debugging; max 3 fix attempts per failure
 validate  the project's own typecheck / lint / tests / build
 review    self-review of the real git diff → fix findings → validate again
 report    implementation-report.md; status READY_FOR_PR or BLOCKED
 ```
 
-Progress is recorded in `.work/HYP-123/`: `ticket.md` (status), `analysis.md`, `dependency-analysis.md`, `plan.md`, `validation.md`, `review.md`, `implementation-report.md`. A new session can resume from these files.
+Everything is recorded in `.work/HYP-123/`: `ticket.md` (status), `analysis.md`, `dependency-analysis.md`, `plan.md`, `validation.md`, `review.md`, `implementation-report.md`. A new session can resume from these files.
 
-### 8. Review the result
+**5. Check readiness**
 
-```sh
+```bash
 finish-ticket HYP-123
 ```
 
-Verifies git state, runs the validation it can detect, scans the diff for debug code, TODOs, and conflict markers, writes `validation.md`, and reports `READY_FOR_PR` or `NOT READY` with blockers. It never commits, pushes, or merges.
+Verifies git state, runs the validation it can detect, scans the diff for debug code, TODOs, and conflict markers, writes `validation.md`, and prints `READY_FOR_PR` or `NOT READY` with reasons. It never commits, pushes, or merges.
 
-Then read `implementation-report.md` — it separates **Implemented**, **Verified**, **Not verified**, **Known issues**, and **Suggested follow-ups** — and review the diff yourself.
+**6. Review** `.work/HYP-123/implementation-report.md` — it separates **Implemented**, **Verified**, **Not verified**, **Known issues**, and **Suggested follow-ups** — and the diff.
 
-### 9. Create the PR
+**7. Commit, push, and open the PR yourself.** The agent does this only when explicitly asked.
 
-You commit, push, and open the PR (the agent does this only when explicitly asked).
+**8. Clean up after merge**
 
-### 10. Clean up after merge
-
-```sh
+```bash
 git worktree remove ../worktrees/HYP-123
 git branch -d feature/HYP-123
 ```
 
-Set `ticket.status: DONE` in `.work/HYP-123/ticket.md`; keep or archive the context directory.
+Set `status: DONE` in `.work/HYP-123/ticket.md`; keep or archive the context directory.
+
+### Things to remember
+
+- Each worktree needs its own dependency install (`pnpm install` or equivalent); the agent does this during analysis.
+- Editing `.kilo/kilo.jsonc` later does not update existing worktrees; new tickets get the new version. To refresh one, delete its copy and re-run `start-ticket` for that ticket.
+- On the first ticket, ask Kilo "Which instruction files are loaded?" to confirm it picked up `AGENTS.md`.
+
+### Without the scripts
+
+```bash
+git worktree add ../worktrees/HYP-123 -b feature/HYP-123 main
+mkdir -p .work/HYP-123 && cp /d/Projects/agent2793/templates/ticket.md .work/HYP-123/   # fill in placeholders
+mkdir -p ../worktrees/HYP-123/.kilo && cp .kilo/kilo.jsonc ../worktrees/HYP-123/.kilo/
+```
 
 ## Parallel tickets
+
+Repeat steps 1–3 for each ticket:
 
 ```text
 Terminal 1                         Terminal 2                         Terminal 3
@@ -190,7 +185,13 @@ HYP-102 → updates FormGenerator consumers      ⇒ HYP-102 BLOCKED by HYP-101
 HYP-103 → Storybook docs for unrelated widget  ⇒ ISOLATED
 ```
 
-For HYP-102 the agent stops and asks: wait for HYP-101, or build on its branch (`start-ticket HYP-102 --base feature/HYP-101`). It does not redesign the API itself, and it never invents dependencies — uncertain ones are marked *potential* and raised with you.
+For HYP-102 the agent stops and asks: wait for HYP-101, or build on its branch:
+
+```bash
+start-ticket HYP-102 --base feature/HYP-101
+```
+
+It does not redesign the API itself, and it never invents dependencies — uncertain ones are marked *potential* and raised with you.
 
 Worktrees isolate files, not the machine: dependency installs are per worktree, and dev-server ports, local databases, and caches can still collide. See [`workspace/README.md`](workspace/README.md#shared-resources-beyond-git).
 
@@ -220,7 +221,7 @@ One session normally plays all roles in sequence. Because roles communicate only
 ## Project-specific rules
 
 ```text
-Global engineering rules (Engineering Agent)
+Global engineering rules (agent2793)
         ↓
 Project rules (your repo's AGENTS.md, rule files)
         ↓
@@ -238,8 +239,6 @@ More specific wins. Example project `AGENTS.md`:
 ```
 
 The agent uses exactly these. Safety rules — never touch another ticket's work, no destructive commands, no false claims, no secrets, no push/merge unless asked — can only be relaxed by an explicit human instruction in the session.
-
-To control `finish-ticket` validation, commit `.engineering-agent/validation` (see [`workspace/structure.md`](workspace/structure.md#project-validation-override)).
 
 ## Scripts
 

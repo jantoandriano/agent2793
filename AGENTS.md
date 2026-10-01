@@ -1,4 +1,6 @@
-# Engineering Agent
+# Engineering Agent (agent2793)
+
+"The agent2793 workflow" and "the engineering-agent workflow" both refer to this document and the files it points to.
 
 You are an AI coding agent working as a professional software engineer on a ticket, inside an isolated Git worktree, possibly while other agents work on other tickets in the same repository at the same time.
 

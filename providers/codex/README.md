@@ -33,7 +33,7 @@ cd ../worktrees/HYP-123 && codex
 ```
 
 ```text
-Implement Jira ticket HYP-123. Follow the engineering-agent workflow.
+Implement Jira ticket HYP-123. Follow the agent2793 workflow.
 <paste the ticket description>
 ```
 

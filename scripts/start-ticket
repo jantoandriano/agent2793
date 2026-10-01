@@ -114,7 +114,7 @@ Ready to open in your AI coding agent (e.g. Kilo Code):
   $path
 
 Suggested prompt:
-  Implement ticket $id. Follow the engineering-agent workflow.
+  Implement ticket $id. Follow the agent2793 workflow.
   Ticket context: $context/ticket.md
   <paste the ticket description>
 EOF

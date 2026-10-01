@@ -57,7 +57,7 @@ start-ticket TEST-1 --title "Add a --verbose flag"
 Open the printed worktree in the tool and send:
 
 ```text
-Implement ticket TEST-1. Follow the engineering-agent workflow. Stop after the plan.
+Implement ticket TEST-1. Follow the agent2793 workflow. Stop after the plan.
 ```
 
 Expected: the agent checks branch, status, and worktrees; sets `ticket.status` to `ANALYZING`; writes `analysis.md` and `dependency-analysis.md` in `.work/TEST-1/`; writes `plan.md`; and modifies no code.

@@ -69,7 +69,7 @@ code D:/Projects/worktrees/HYP-123      # one VS Code window per ticket = one Ki
 In that window's Kilo panel:
 
 ```text
-Implement Jira ticket HYP-123. Follow the engineering-agent workflow.
+Implement Jira ticket HYP-123. Follow the agent2793 workflow.
 <paste the ticket description>
 ```
 
