@@ -52,7 +52,7 @@ To start a ticket from chat (in the main checkout):
 Start ticket HYP-123 "Add CSV export" with agent2793 (D:/Projects/agent2793/SETUP.md, section B).
 ```
 
-The agent runs `start-ticket` and tells you which worktree to open; you then give the ticket to Kilo in that new window (step 3 below). To check readiness: `Check if ticket HYP-123 is ready (D:/Projects/agent2793/SETUP.md, section C).`
+The agent runs `start-ticket` and tells you the worktree path; you then start a Kilo session in that worktree and give it the ticket (steps 2–3 below). To check readiness: `Check if ticket HYP-123 is ready (D:/Projects/agent2793/SETUP.md, section C).`
 
 [`SETUP.md`](SETUP.md) holds the agent's instructions for all three.
 
@@ -104,13 +104,13 @@ start-ticket HYP-123 --title "Add CSV export"     # --type bug|refactor|investig
 
 This creates branch `feature/HYP-123`, worktree `D:/Projects/worktrees/HYP-123`, and ticket context `.work/HYP-123/ticket.md`, copies the files listed in `.work/local-files`, and lists other active tickets.
 
-**2. Open the worktree in its own window**
+**2. Start a Kilo session in the worktree**
 
-```bash
-code D:/Projects/worktrees/HYP-123
-```
+In your existing VS Code window, open Kilo's **Agent Manager** and import the existing worktree `D:/Projects/worktrees/HYP-123` (`start-ticket` already created it). This creates a session that works inside that worktree. No new window needed; each ticket becomes one session in the Agent Manager panel.
 
-One window per worktree = one Kilo session per ticket. Never point two sessions at the same worktree.
+The rule is one session per ticket, and that session's working folder must be the ticket's worktree. A plain new chat in your `my-app` window does not qualify — it would edit the main checkout. Alternatives: open the worktree as its own window (`code D:/Projects/worktrees/HYP-123`), or run a CLI agent in a terminal from the worktree folder.
+
+If Agent Manager will not import worktrees outside the project, create them where it keeps its own: `start-ticket HYP-123 --path .kilo/worktrees/HYP-123`.
 
 **3. Give Kilo the ticket**
 
@@ -172,15 +172,18 @@ mkdir -p ../worktrees/HYP-123/.kilo && cp .kilo/kilo.jsonc ../worktrees/HYP-123/
 
 ## Parallel tickets
 
-Repeat steps 1–3 for each ticket:
+Repeat steps 1–3 for each ticket. Everything stays in one VS Code window:
 
 ```text
-Terminal 1                         Terminal 2                         Terminal 3
-start-ticket HYP-101               start-ticket HYP-102 --type bug    start-ticket HYP-103
-→ ../worktrees/HYP-101             → ../worktrees/HYP-102             → ../worktrees/HYP-103
-→ Kilo session: "Implement         → Kilo session: "Implement         → Kilo session: "Implement
-  HYP-101 ..."                       HYP-102 ..."                       HYP-103 ..."
+start-ticket HYP-101        start-ticket HYP-102 --type bug        start-ticket HYP-103
+
+Kilo Agent Manager (one window)
+├── session: worktrees/HYP-101   "Implement ticket HYP-101 ..."
+├── session: worktrees/HYP-102   "Implement ticket HYP-102 ..."
+└── session: worktrees/HYP-103   "Implement ticket HYP-103 ..."
 ```
+
+Two or three tickets in parallel is a realistic limit: each agent pauses at checkpoints for you, and you review every plan and diff.
 
 ```text
 my-app/                     main worktree (you)

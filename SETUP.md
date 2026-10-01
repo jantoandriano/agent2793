@@ -103,14 +103,19 @@ The human says something like "Start ticket HYP-123 'Add CSV export' with agent2
 
    Infer `--type` from the human's description when obvious (bug report → `bug`); otherwise use the default. Use `--base <other ticket branch>` only if the human says the ticket builds on another ticket.
 3. Report the branch, worktree path, and context path from the script output.
-4. Tell the human to open the worktree in a **new** editor window (or offer to run `code <worktree>`) and to send there:
+4. Tell the human how to start the ticket's agent session **in the worktree folder**:
+
+   - **Kilo (VS Code):** in Agent Manager, import the existing worktree `<worktree path>` (it is already on disk) to create a session in it. No new window needed.
+   - **Any tool:** open the worktree folder as its own workspace/window, or start the tool's CLI with the worktree as working directory.
+
+   and to send in that session:
 
    ```text
    Implement ticket <ID>. Follow the agent2793 workflow.
    <ticket description>
    ```
 
-Do not implement the ticket in the current session: this session is in the main worktree, and each ticket needs its own worktree and session (`workspace/README.md`).
+Do not implement the ticket in the current session: this session works in the main worktree, and each ticket needs its own session whose working folder is the ticket's worktree (`workspace/README.md`). A new chat in the same folder is not enough — it would still edit the main worktree.
 
 ## C. Finish a ticket
 

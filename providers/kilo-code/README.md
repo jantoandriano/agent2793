@@ -63,10 +63,15 @@ In Git Bash:
 ```bash
 cd /d/Projects/my-app
 /d/Projects/agent2793/scripts/start-ticket HYP-123 --title "Add CSV export"
-code D:/Projects/worktrees/HYP-123      # one VS Code window per ticket = one Kilo session
 ```
 
-In that window's Kilo panel:
+Start a session whose working folder is the worktree. Recommended: Kilo's **Agent Manager**, in your existing window — import the existing worktree `D:/Projects/worktrees/HYP-123` ("import a worktree that already exists on disk"); this creates a session in it. One session per ticket; all tickets stay in one panel.
+
+- A plain new chat in the `my-app` window does **not** work: it runs in the main checkout.
+- Agent Manager can also create its own worktrees (under `.kilo/worktrees/`), but those have no `.work/<ID>/` context — use `start-ticket` and import instead. If your version only accepts worktrees under `.kilo/worktrees/`, create them there: `start-ticket HYP-123 --path .kilo/worktrees/HYP-123`.
+- Alternative: open the worktree as its own window (`code D:/Projects/worktrees/HYP-123`).
+
+In the ticket's session:
 
 ```text
 Implement Jira ticket HYP-123. Follow the agent2793 workflow.
@@ -90,6 +95,7 @@ When the agent reports completion:
 ## Limitations
 
 - Not confirmed from Kilo's documentation: whether a project `instructions` list is appended to or replaces the global one, and how relative paths in `instructions` resolve. Absolute paths avoid the second; if you use both global and project instructions, check that both load.
+- Not confirmed: whether an Agent Manager session in an imported worktree loads `.kilo/kilo.jsonc` from that worktree. `start-ticket` copies it there; on the first ticket, ask the session "Which instruction files are loaded?"
 - Every worktree needs its own dependency install (`node_modules` is not shared).
 - Kilo's auto-approve settings decide whether commands run without confirmation. Keep approval on for git writes (commit, push) if you want "never push unless asked" enforced by the tool as well.
 
