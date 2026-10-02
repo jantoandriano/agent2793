@@ -1,6 +1,6 @@
 # agent2793 Setup (instructions for the AI agent)
 
-The human asked you to set up agent2793 in their project, or to start a ticket with it. Follow the matching section exactly. `EA_HOME` is the directory containing this file.
+The human asked you to set up agent2793 in their project, or to start, check, or clean up tickets with it. Follow the matching section exactly. `EA_HOME` is the directory containing this file.
 
 Ground rules for everything below:
 
@@ -153,3 +153,21 @@ bash <EA_HOME>/scripts/check-prs
 Report the table and the suggested actions. Read-only.
 
 **"Address PR feedback for HYP-123"** — must run in that ticket's session (its worktree). If you are in the main worktree or another ticket's worktree, tell the human which session to use and stop. Otherwise follow `ticket/pr-feedback.md`.
+
+## E. Clean up merged tickets
+
+The human says "Clean up merged tickets" or "Clean up HYP-123". Run from the main checkout (first entry of `git worktree list`). If this session works inside a ticket worktree, that worktree cannot be removed from here: say so and skip it.
+
+1. Preview:
+
+   ```bash
+   bash <EA_HOME>/scripts/cleanup-ticket --merged --dry-run      # or: cleanup-ticket HYP-123 --dry-run
+   ```
+
+2. Tell the human to close the Agent Manager sessions (and editors, dev servers) of the tickets that would be removed. On Windows, open files block the removal.
+3. Run the same command without `--dry-run`.
+4. Report what was removed and every ticket that was kept, with the script's reason (not merged, uncommitted changes, local commits not in the PR). Do not resolve those yourself. Never use `--force` unless the human names the ticket and accepts losing its uncommitted work.
+
+The script decides "merged" from the pull request on GitHub (`gh`), not from the Jira status: Jira workflows differ (Done, Released, Closed, ...) and a ticket can be Done in Jira while its PR is still open, or the reverse. Do not remove a worktree because of the Jira status. The script keeps `.work/<ID>/`, never deletes remote branches, and sets `ticket.status: DONE` for merged tickets.
+
+`--merged` also cleans up stale Kilo Agent Manager worktrees under `.kilo/worktrees/` (leftovers from Agent Manager sessions that are no longer running), using the same command. A branch-attached one is removed when its PR is merged or its branch is contained in the base; a detached one is removed when its HEAD is contained in the base branch and is not the current base tip. Close the Agent Manager session first; a dirty worktree, and the one this session runs from, are skipped with the reason. The script removes only the worktree directory, never a branch.

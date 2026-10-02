@@ -28,7 +28,7 @@ Stop and ask if: the branch is wrong; you are in the main worktree while the tic
 - Modify files only inside your own worktree (plus your own `.work/<TICKET-ID>/` directory).
 - Never check out, switch, reset, rebase, or commit on a branch that belongs to another ticket.
 - Never run `git switch`/`git checkout <branch>` inside another agent's worktree. Do not switch branches in your own worktree either; the worktree is bound to its ticket.
-- Never remove, move, or prune other worktrees (`git worktree remove`, `git worktree prune`).
+- Never remove, move, or prune other worktrees (`git worktree remove`, `git worktree prune`). Cleaning up merged tickets is done with `scripts/cleanup-ticket`, and only when the human asks.
 - Do not use `git stash`: the stash is shared by all worktrees, and another agent's `stash pop` can take your entry (or you theirs).
 - Reading other branches is allowed: `git log <branch>`, `git diff <base>...<branch>`, `git show <branch>:<path>`.
 

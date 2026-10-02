@@ -31,6 +31,14 @@ When the human asks to start a ticket ("start ticket HYP-123", "start HYP-123 wi
 
 If the script fails, report its error and stop; do not fall back to working in the current folder. When the current folder already is the ticket's worktree (`git branch --show-current` equals `workspace.branch` in its `ticket.md`), skip this and execute the ticket (section 6).
 
+### Other requests the human may make
+
+| Request | Do |
+|---|---|
+| "Check if HYP-123 is ready" | `bash <EA_HOME>/scripts/finish-ticket <ID>`; report the verdict and blockers (`SETUP.md` §C) |
+| "Check my PRs" | `bash <EA_HOME>/scripts/check-prs`; report the table and actions (`SETUP.md` §D) |
+| "Clean up HYP-123" / "Clean up merged tickets" | `SETUP.md` §E: run `scripts/cleanup-ticket` with `--dry-run`, then for real, from the main checkout, never from inside the worktree being removed. The request is approval for tickets the script verifies as merged and clean. "Merged" is the PR's state on GitHub, never the issue tracker status (Jira "Done", "Released", ... vary by team). `--merged` also sweeps stale Kilo Agent Manager worktrees under `.kilo/worktrees/` whose branch/HEAD is merged and clean; close their sessions first. Use `--force` only when the human names the ticket and explicitly accepts losing its uncommitted work |
+
 ## 2. Loading rules
 
 Always load:

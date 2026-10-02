@@ -59,9 +59,8 @@ Each agent **writes only its own** `.work/<TICKET-ID>/`.
 
 # human: commit, push, open PR, merge
 
-# clean up after merge
-git worktree remove ../worktrees/HYP-123
-git branch -d feature/HYP-123
+# clean up after merge: removes worktree + local branch, sets DONE, keeps .work/HYP-123/
+<EA_HOME>/scripts/cleanup-ticket HYP-123      # or --merged
 ```
 
 Keep `.work/HYP-123/` as the record of the work, or archive/delete it when no longer useful.

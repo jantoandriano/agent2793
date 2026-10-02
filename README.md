@@ -28,7 +28,7 @@ workflows/             ticket (canonical), feature, bug-fix, refactor, investiga
 ticket/                phase instructions: analyze, plan, implement, validate, review, finish
 templates/             ticket, plan, dependency-analysis, review, implementation-report
 workspace/             worktree model and ticket context structure
-scripts/               create-worktree, start-ticket, finish-ticket
+scripts/               create-worktree, start-ticket, finish-ticket, check-prs, cleanup-ticket
 providers/             how to load this into Kilo Code, Claude Code, Codex, others
 ```
 
@@ -180,12 +180,19 @@ The agent fetches the reviews, comments, and failing CI checks, classifies each 
 
 **9. Clean up after merge**
 
+Every worktree is a full copy of the app plus its own `node_modules`, so remove it once the PR is merged. Close the ticket's Agent Manager session first (on Windows, open files block the removal), then in the main checkout:
+
 ```bash
-git worktree remove ../worktrees/HYP-123
-git branch -d feature/HYP-123
+cleanup-ticket --merged --dry-run   # what would be removed
+cleanup-ticket --merged             # every ticket whose PR is merged
+cleanup-ticket HYP-123              # or one ticket
 ```
 
-Set `status: DONE` in `.work/HYP-123/ticket.md`; keep or archive the context directory.
+Or from chat: `Clean up merged tickets with agent2793`. "Merged" means the PR is merged on GitHub; the Jira status (Done, Released, ...) is not used, since it differs between teams. For each merged ticket it removes the worktree folder and the local branch, and sets `status: DONE`. It keeps `.work/HYP-123/` as the record and never deletes the remote branch (turn on GitHub's "Automatically delete head branches" for that). It skips, with the reason, a ticket whose PR is not merged, whose worktree has uncommitted changes, or whose local branch has commits that are not in the PR. `check-prs` lists merged tickets so you know when to run it.
+
+`--merged` also sweeps stale Kilo Agent Manager worktrees under `.kilo/worktrees/` (folders left by finished Agent Manager sessions). It removes a branch-attached one when its PR is merged or its branch is in the base branch, and a detached one when its HEAD is in the base branch and is not the current base tip (a worktree sitting on the base tip looks new/active and is kept). Close the Agent Manager session first; dirty worktrees and the one you run the command from are skipped with the reason.
+
+An abandoned ticket: `cleanup-ticket HYP-123 --force` removes the worktree anyway and keeps the branch, so `start-ticket HYP-123` can bring it back.
 
 ### Things to remember
 
@@ -260,7 +267,7 @@ TODO → ANALYZING → PLANNED → READY → IN_PROGRESS → VALIDATING → REVI
 BLOCKED (any time, with reason)    CANCELLED (human)
 ```
 
-`DONE` is set by a human after merge. Writing code never makes a ticket done. Full transition table: [`workflows/ticket.md`](workflows/ticket.md).
+`DONE` is set after merge, by you or by `cleanup-ticket`. Writing code never makes a ticket done. Full transition table: [`workflows/ticket.md`](workflows/ticket.md).
 
 ## Agent roles
 
@@ -304,8 +311,9 @@ The agent uses exactly these. Safety rules — never touch another ticket's work
 | `start-ticket <ID>` | `create-worktree` + `.work/<ID>/ticket.md` + git exclude + copies files listed in `.work/local-files` + list of other active tickets + what to open |
 | `finish-ticket [ID]` | Git checks, detected validation (affected tests only, unless deps/test config changed or `--full-tests`), diff scan, `validation.md`, report draft, readiness verdict (exit 0 ready, 2 not ready) |
 | `check-prs [--all]` | For each ticket: its PR, review decision, CI status, and count of review feedback not yet handled; says which session to tell what. Read-only; needs `gh` |
+| `cleanup-ticket <ID>... \| --merged` | For tickets whose PR is merged: removes the worktree folder and local branch, sets `DONE`, keeps `.work/<ID>/`. Skips (with the reason) anything unmerged, with uncommitted changes, or with local commits not in the PR. `--dry-run`, `--force` |
 
-All support `--help`. Bash; on Windows run them from Git Bash or WSL. They never commit, push, merge, or touch other tickets' worktrees.
+All support `--help`. Bash; on Windows run them from Git Bash or WSL. They never commit, push, or merge. Only `cleanup-ticket` removes worktrees, and only for the tickets you name or whose PRs are merged.
 
 ## Design principles
 

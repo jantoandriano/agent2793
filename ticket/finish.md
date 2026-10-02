@@ -81,12 +81,12 @@ Review comments and requested changes are handled in the same ticket session wit
 
 ## After merge (human)
 
-- Set `ticket.status: DONE`, then clean up:
+- Clean up, from the main checkout, after closing the ticket's agent session:
 
   ```bash
-  git worktree remove ../worktrees/HYP-123
-  git branch -d feature/HYP-123
-  # keep or archive .work/HYP-123/ as the record of the work
+  <EA_HOME>/scripts/cleanup-ticket HYP-123     # or --merged for every merged ticket; --dry-run to preview
   ```
+
+  It verifies the PR is merged and nothing would be lost, removes the worktree and local branch, sets `ticket.status: DONE`, and keeps `.work/HYP-123/` as the record of the work.
 
 - Abandoned ticket: set `ticket.status: CANCELLED` with a reason; remove the worktree when no longer needed.

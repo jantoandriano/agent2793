@@ -1,0 +1,442 @@
+#!/usr/bin/env bash
+# cleanup-ticket — remove the worktree, local branch, and context of tickets whose pull request is merged.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: cleanup-ticket <TICKET-ID>... [options]
+       cleanup-ticket --merged [options]
+
+For each ticket whose pull request is merged:
+  1. removes its worktree folder (../worktrees/<ID>, including node_modules)
+  2. deletes its local branch (never the remote branch)
+  3. deletes its context directory .work/<ID>/ (plan, reports, logs); the record of
+     the work lives on in git history, the PR, and the tracker comment
+The context directory is kept instead, with ticket.status set to DONE, when:
+  - --keep-context is given, or
+  - .work/<ID>/tracker-comment.md exists but tracker.comment_posted is empty
+    (the tracker comment was never posted: it would be the only summary of the work)
+.work/local-files is never touched.
+
+In --merged mode it also cleans up stale Kilo Agent Manager worktrees under
+.kilo/worktrees/ (leftovers that no longer belong to a live session), in addition
+to the tickets:
+  - attached to a branch: removed when that branch's PR is merged (or the branch
+    is contained in the base branch);
+  - detached (Agent Manager default): removed when its HEAD is contained in the
+    base branch and is not the current base tip (a worktree sitting exactly on the
+    base tip looks new/active and is kept).
+A .kilo/worktrees entry with uncommitted changes, or the one you are running from,
+is skipped. Close the Agent Manager session first (on Windows open files block the
+removal); the script removes only the worktree, never a branch.
+
+"Merged" means the pull request's state on GitHub, never the issue tracker status
+(Jira workflows differ: Done, Released, Closed, ...).
+
+A ticket is skipped, with the reason, unless all of these hold:
+  - merged: its PR is merged (GitHub CLI). Without gh, or when no PR is found:
+    the branch is contained in its base branch and the ticket status is
+    READY_FOR_PR, IN_REVIEW, or DONE.
+  - clean: the worktree has no uncommitted changes and no untracked files
+    (ignored files such as node_modules and .env do not count).
+  - nothing lost: the local branch has no commits beyond what was merged.
+  - not in use: you are not running this from inside that worktree.
+Tickets already cleaned up earlier (status DONE, no worktree, no branch) only get
+their context directory deleted, under the same rules.
+
+Options:
+  --merged     check every ticket in .work/ and clean up the merged ones
+  --dry-run    show what would happen; change nothing
+  --keep-context
+               keep .work/<ID>/ (status set to DONE) instead of deleting it
+  --force      remove the worktree even if not merged or not clean (uncommitted
+               work in it is lost). An unmerged branch and its .work/<ID>/ are kept
+               and the status is not changed, so the ticket can be restarted with
+               start-ticket.
+  -h, --help   show this help
+
+Close the ticket's agent session (Kilo Agent Manager), editors, terminals, and dev
+servers using the worktree first; on Windows open files block the removal.
+Exit status: 0 when every requested ticket was cleaned up (or, with --merged, when
+nothing failed), 2 when a requested ticket was skipped or a removal failed.
+EOF
+}
+
+ids=() merged_mode=0 dry=0 force=0 keep_context=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --merged) merged_mode=1; shift ;;
+    --dry-run) dry=1; shift ;;
+    --force) force=1; shift ;;
+    --keep-context) keep_context=1; shift ;;
+    -h | --help) usage; exit 0 ;;
+    -*) ea_die "unknown option '$1' (see --help)" ;;
+    *) ea_validate_ticket_id "$1"; ids+=("$1"); shift ;;
+  esac
+done
+[[ $merged_mode -eq 1 || ${#ids[@]} -gt 0 ]] || { usage >&2; exit 1; }
+[[ $merged_mode -eq 0 || ${#ids[@]} -eq 0 ]] || ea_die "use either ticket IDs or --merged, not both"
+[[ $merged_mode -eq 0 || $force -eq 0 ]] || ea_die "--force works only with explicit ticket IDs"
+
+ea_require_git_repo
+here=$(ea_abspath .)
+main=$(ea_main_worktree)
+cd "$main" || exit 1
+
+if [[ $merged_mode -eq 1 ]]; then
+  shopt -s nullglob
+  for f in .work/*/ticket.md; do
+    d=${f%/ticket.md}
+    ids+=("${d#.work/}")
+  done
+  [[ ${#ids[@]} -gt 0 ]] || echo "No tickets in $main/.work/"
+fi
+
+gh_ok=0
+if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+  gh_ok=1
+else
+  ea_warn "GitHub CLI not available or not logged in: merge is checked with git only (branch contained in base)"
+fi
+git remote get-url origin >/dev/null 2>&1 && git fetch -q origin 2>/dev/null
+
+today=$(date +%Y-%m-%d)
+failed=0 cleaned=0
+
+# Set a scalar in the ticket.md header, keeping its inline comment.
+set_field() {
+  local file=$1 key=$2 value=$3 tmp
+  tmp=$(mktemp)
+  awk -v key="$key" -v value="$value" '
+    !done && $0 ~ "^[[:space:]]+" key ":" {
+      match($0, "^[[:space:]]+" key ":[[:space:]]*")
+      prefix = substr($0, 1, RLENGTH)
+      rest = substr($0, RLENGTH + 1)
+      comment = ""
+      if (match(rest, /[[:space:]]+#.*$/)) comment = substr(rest, RSTART)
+      print prefix value comment
+      done = 1
+      next
+    }
+    { print }' "$file" >"$tmp" && cat "$tmp" >"$file"
+  rm -f "$tmp"
+}
+
+# Why .work/<ID>/ must be kept (empty: it may be deleted).
+context_keep_reason() {
+  local id=$1 ticket=".work/$1/ticket.md"
+  if [[ $keep_context -eq 1 ]]; then
+    echo "--keep-context"
+  elif [[ -f ".work/$id/tracker-comment.md" && -z "$(ea_ticket_field "$ticket" comment_posted)" ]]; then
+    echo "tracker comment not posted yet (.work/$id/tracker-comment.md): post it, then re-run"
+  fi
+}
+
+# Delete .work/<ID>/ (id already validated). Returns 1 on failure.
+remove_context() {
+  local id=$1
+  if rm -rf -- "$main/.work/$id"; then
+    echo "  deleted context .work/$id/"
+  else
+    echo "  FAILED to delete .work/$id/ (close files open from it, then re-run)"
+    failed=1
+    return 1
+  fi
+}
+
+skip() {
+  echo "  kept: $*"
+  [[ $merged_mode -eq 1 ]] || failed=1
+}
+
+# Base ref used to decide whether a .kilo/worktrees entry is merged.
+kilo_base_ref() {
+  local base ref
+  base=$(ea_default_base)
+  for ref in "origin/${base#origin/}" "${base#origin/}"; do
+    if git rev-parse --verify --quiet "$ref^{commit}" >/dev/null; then
+      printf '%s\n' "$ref"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Remove merged, clean Kilo Agent Manager worktrees under .kilo/worktrees/.
+clean_kilo_worktrees() {
+  local base_ref base_tip
+  base_ref=$(kilo_base_ref) || {
+    echo
+    echo "Kilo Agent Manager worktrees (.kilo/worktrees/)"
+    echo "  kept: cannot find a base branch to compare against"
+    return
+  }
+  base_tip=$(git rev-parse "$base_ref")
+
+  local entries=() rec wt sha wbranch detached prunable merged how pr dirty rel
+  while IFS='|' read -r wt sha wbranch detached prunable; do
+    case "$wt/" in
+      "$main"/.kilo/worktrees/*) entries+=("$wt|$sha|$wbranch|$detached|$prunable") ;;
+    esac
+  done < <(git worktree list --porcelain | awk '
+    /^worktree / { path = substr($0, 10) }
+    /^HEAD /     { sha = substr($0, 6) }
+    /^branch /   { branch = substr($0, 8); sub("^refs/heads/", "", branch) }
+    /^detached/  { detached = 1 }
+    /^prunable/  { prunable = 1 }
+    /^$/ {
+      if (path != "") print path "|" sha "|" branch "|" detached + 0 "|" prunable + 0
+      path = ""; sha = ""; branch = ""; detached = 0; prunable = 0
+    }
+    END {
+      if (path != "") print path "|" sha "|" branch "|" detached + 0 "|" prunable + 0
+    }')
+  [[ ${#entries[@]} -gt 0 ]] || return 0
+
+  echo
+  echo "Kilo Agent Manager worktrees (.kilo/worktrees/)"
+  for rec in "${entries[@]}"; do
+    IFS='|' read -r wt sha wbranch detached prunable <<<"$rec"
+    rel=${wt#"$main"/}
+    echo "  $rel"
+
+    if [[ "$here/" == "$wt/"* ]]; then
+      echo "  kept: you are inside this worktree; run from the main checkout ($main)"
+      continue
+    fi
+
+    merged=0 how=""
+    if [[ -n "$wbranch" ]]; then
+      if [[ $gh_ok -eq 1 ]]; then
+        pr=$(gh pr list --head "$wbranch" --state merged --limit 1 --json number \
+          --jq '.[0].number // empty' 2>/dev/null)
+        [[ -z "$pr" ]] || { merged=1; how="PR #$pr merged"; }
+      fi
+      if [[ $merged -eq 0 ]]; then
+        if git merge-base --is-ancestor "$sha" "$base_ref" 2>/dev/null; then
+          merged=1 how="branch '$wbranch' contained in $base_ref"
+        else
+          how="branch '$wbranch' has commits not in $base_ref"
+        fi
+      fi
+    elif [[ "$sha" == "$base_tip" ]]; then
+      how="detached HEAD is the base tip (looks new or active)"
+    elif git merge-base --is-ancestor "$sha" "$base_ref" 2>/dev/null; then
+      merged=1 how="detached HEAD ${sha:0:8} contained in $base_ref"
+    else
+      how="detached HEAD ${sha:0:8} is not in $base_ref"
+    fi
+
+    if [[ $prunable -eq 1 || ! -d "$wt" ]]; then
+      if [[ $merged -eq 0 ]]; then
+        echo "  kept: $how"
+      elif [[ $dry -eq 1 ]]; then
+        echo "  already gone ($how); would prune its git worktree entry"
+      elif git worktree prune; then
+        echo "  pruned stale worktree entry ($how)"
+        cleaned=$((cleaned + 1))
+      else
+        echo "  FAILED to prune the git worktree entry for $rel"
+        failed=1
+      fi
+      continue
+    fi
+
+    if [[ $merged -eq 0 ]]; then
+      echo "  kept: $how"
+      continue
+    fi
+
+    dirty=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "$dirty" -ne 0 ]]; then
+      echo "  kept: $how, but it has $dirty uncommitted change(s) or untracked file(s)"
+      continue
+    fi
+
+    if [[ $dry -eq 1 ]]; then
+      echo "  $how; would remove worktree $wt"
+      continue
+    fi
+    if git worktree remove "$wt"; then
+      echo "  removed worktree ($how)"
+      cleaned=$((cleaned + 1))
+    else
+      echo "  FAILED to remove $wt — close the agent session, editors, terminals, and dev servers using it, then re-run"
+      failed=1
+    fi
+  done
+}
+
+for id in "${ids[@]}"; do
+  ticket=".work/$id/ticket.md"
+  echo "$id"
+  if [[ ! "$id" =~ ^[A-Za-z][A-Za-z0-9_]*-[0-9]+$ ]]; then
+    skip "'.work/$id' is not a ticket directory (invalid ticket ID)"
+    continue
+  fi
+  if [[ ! -f "$ticket" ]]; then
+    skip "no $main/$ticket"
+    continue
+  fi
+  status=$(ea_ticket_field "$ticket" status)
+  branch=$(ea_ticket_field "$ticket" branch)
+  base=$(ea_ticket_field "$ticket" base)
+  [[ -n "$branch" ]] || { skip "no workspace.branch in ticket.md"; continue; }
+
+  wt=$(ea_worktree_for_branch "$branch")
+  [[ -z "$wt" ]] || wt=$(ea_abspath "$wt" || printf '%s' "$wt")
+  has_branch=0
+  git show-ref --verify --quiet "refs/heads/$branch" && has_branch=1
+  tip=""
+  [[ $has_branch -eq 1 ]] && tip=$(git rev-parse "refs/heads/$branch")
+
+  if [[ -z "$wt" && $has_branch -eq 0 ]]; then
+    if [[ "$status" == DONE ]]; then
+      keep=$(context_keep_reason "$id")
+      if [[ -n "$keep" ]]; then
+        echo "  already cleaned up (DONE); context kept: $keep"
+      elif [[ $dry -eq 1 ]]; then
+        echo "  already cleaned up (DONE); would delete context .work/$id/"
+      else
+        echo "  already cleaned up (DONE)"
+        remove_context "$id" && cleaned=$((cleaned + 1))
+      fi
+    elif [[ "$status" == CANCELLED ]]; then
+      echo "  already cleaned up (CANCELLED); context kept"
+    else
+      skip "no worktree and no local branch '$branch' (status $status)"
+    fi
+    continue
+  fi
+
+  # --- merged? ---
+  merged=0 how="" pr_number="" pr_url="" pr_head="" pr_state=""
+  if [[ $gh_ok -eq 1 ]]; then
+    # A merged PR wins over newer closed/open ones for the same branch.
+    for state in merged all; do
+      pr=$(gh pr list --head "$branch" --state "$state" --limit 1 --json number,url,state,headRefOid \
+        --jq '.[0] // empty | [.number, .url, .state, .headRefOid] | @tsv' 2>/dev/null)
+      [[ -z "$pr" ]] || break
+    done
+    [[ -n "$pr" ]] && IFS=$'\t' read -r pr_number pr_url pr_state pr_head <<<"$pr"
+  fi
+  if [[ "$pr_state" == MERGED ]]; then
+    merged=1 how="PR #$pr_number merged"
+  elif [[ -n "$pr_state" ]]; then
+    how="PR #$pr_number is $pr_state"
+  elif [[ $has_branch -eq 1 ]]; then
+    for ref in "origin/${base#origin/}" "${base#origin/}"; do
+      git rev-parse --verify --quiet "$ref^{commit}" >/dev/null || continue
+      if git merge-base --is-ancestor "$tip" "$ref"; then
+        case "$status" in
+          READY_FOR_PR | IN_REVIEW | DONE) merged=1 how="branch contained in $ref" ;;
+          *) how="branch contained in $ref, but status is $status (nothing committed yet?)" ;;
+        esac
+      else
+        how="branch has commits not in $ref"
+      fi
+      break
+    done
+    [[ -n "$how" ]] || how="cannot find base branch '$base'"
+  else
+    how="no PR found and no local branch to compare"
+  fi
+
+  # --- local commits beyond the merged PR? ---
+  lost=""
+  if [[ $merged -eq 1 && -n "$pr_head" && $has_branch -eq 1 && "$tip" != "$pr_head" ]]; then
+    git cat-file -e "$pr_head^{commit}" 2>/dev/null || git fetch -q origin "refs/pull/$pr_number/head" 2>/dev/null
+    if ! git merge-base --is-ancestor "$tip" "$pr_head" 2>/dev/null; then
+      lost="local branch has commits that are not in the merged PR (local ${tip:0:8}, PR head ${pr_head:0:8})"
+    fi
+  fi
+
+  # --- worktree clean and not in use? ---
+  dirty="" in_use=""
+  if [[ -n "$wt" && -d "$wt" ]]; then
+    changes=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$changes" -eq 0 ]] || dirty="worktree has $changes uncommitted change(s) or untracked file(s): see git -C \"$wt\" status"
+    case "$here/" in "$wt"/*) in_use="you are inside the worktree; run from the main checkout ($main)" ;; esac
+  fi
+
+  [[ -z "$in_use" ]] || { skip "$in_use"; continue; }
+  if [[ $force -eq 0 ]]; then
+    [[ $merged -eq 1 ]] || { skip "not merged: $how"; continue; }
+    [[ -z "$lost" ]] || { skip "$lost"; continue; }
+    [[ -z "$dirty" ]] || { skip "$dirty"; continue; }
+  fi
+  [[ $merged -eq 1 ]] || echo "  --force: not merged ($how); the branch is kept"
+  [[ -z "$lost" ]] || echo "  --force: $lost; the branch is kept"
+  [[ -z "$dirty" ]] || echo "  --force: $dirty — these changes will be lost"
+  [[ $merged -eq 0 ]] || echo "  $how"
+
+  keep=""
+  [[ $merged -eq 1 ]] && keep=$(context_keep_reason "$id")
+
+  if [[ $dry -eq 1 ]]; then
+    [[ -n "$wt" ]] && echo "  would remove worktree $wt"
+    [[ $has_branch -eq 1 && $merged -eq 1 && -z "$lost" ]] && echo "  would delete local branch $branch"
+    if [[ $merged -eq 1 && -z "$keep" ]]; then
+      echo "  would delete context .work/$id/"
+    elif [[ $merged -eq 1 ]]; then
+      echo "  would keep context ($keep) and set status DONE"
+    fi
+    continue
+  fi
+
+  # --- remove worktree ---
+  if [[ -n "$wt" ]]; then
+    if [[ ! -d "$wt" ]]; then
+      git worktree prune && echo "  worktree folder already gone; pruned its entry"
+    else
+      remove_args=()
+      [[ $force -eq 1 ]] && remove_args=(--force)
+      if git worktree remove "${remove_args[@]}" "$wt"; then
+        echo "  removed worktree $wt"
+      else
+        echo "  FAILED to remove $wt — close the agent session, editors, terminals, and dev servers using it, then re-run"
+        failed=1
+        continue
+      fi
+    fi
+  fi
+
+  # --- delete local branch (merged work only) ---
+  if [[ $has_branch -eq 1 && $merged -eq 1 && -z "$lost" ]]; then
+    # -D: squash and rebase merges leave the branch "unmerged" for git; the checks above proved its commits are in the PR.
+    if git branch -D "$branch" >/dev/null; then
+      echo "  deleted local branch $branch (was ${tip:0:8})"
+    else
+      echo "  FAILED to delete branch $branch"
+      failed=1
+    fi
+  fi
+
+  # --- context: delete, or keep it with status DONE ---
+  if [[ $merged -eq 1 && -z "$keep" ]]; then
+    remove_context "$id"
+  elif [[ $merged -eq 1 && "$status" != DONE ]]; then
+    set_field "$ticket" status DONE
+    set_field "$ticket" updated "$today"
+    if [[ -n "$pr_url" && -z "$(ea_ticket_field "$ticket" url)" ]]; then
+      set_field "$ticket" url "$pr_url"
+      set_field "$ticket" number "$pr_number"
+    fi
+    printf -- '- %s DONE — %s; worktree and local branch removed (cleanup-ticket)\n' "$today" "$how" >>"$ticket"
+    echo "  context kept ($keep); status DONE"
+  elif [[ $merged -eq 1 ]]; then
+    echo "  context kept ($keep)"
+  fi
+  cleaned=$((cleaned + 1))
+done
+
+[[ $merged_mode -eq 0 ]] || clean_kilo_worktrees
+
+echo
+if [[ $dry -eq 1 ]]; then
+  echo "Dry run: nothing changed."
+else
+  echo "Cleaned up: $cleaned ticket(s)/worktree(s). Close their Agent Manager sessions."
+fi
+[[ $failed -eq 0 ]] || exit 2

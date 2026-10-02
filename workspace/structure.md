@@ -52,7 +52,7 @@ YAML header, then a Markdown body (description, acceptance criteria, constraints
 | `ticket.id` | e.g. `HYP-123` | start-ticket |
 | `ticket.title` | text | start-ticket / agent |
 | `ticket.type` | `feature` · `bug` · `refactor` · `investigation` · `chore` | start-ticket / agent |
-| `ticket.status` | `TODO` · `ANALYZING` · `PLANNED` · `READY` · `IN_PROGRESS` · `VALIDATING` · `REVIEWING` · `READY_FOR_PR` · `DONE` · `BLOCKED` · `CANCELLED` | agent; `DONE`/`CANCELLED` by human |
+| `ticket.status` | `TODO` · `ANALYZING` · `PLANNED` · `READY` · `IN_PROGRESS` · `VALIDATING` · `REVIEWING` · `READY_FOR_PR` · `DONE` · `BLOCKED` · `CANCELLED` | agent; `DONE`/`CANCELLED` by human (`DONE` also by `cleanup-ticket`) |
 | `ticket.blocked_reason` | text, when `BLOCKED` | agent |
 | `ticket.updated` | date of last change | agent |
 | `workspace.branch` | ticket branch | start-ticket |

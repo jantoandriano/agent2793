@@ -16,7 +16,7 @@ and counts review feedback newer than pr.feedback_handled_at in ticket.md:
 Agent replies (containing <!-- agent2793 -->) are not counted.
 
 Then says what to do: address feedback (new reviews or failing CI) in the ticket's
-session, wait, merge, or clean up.
+session, wait, merge, or clean up (cleanup-ticket).
 Read-only: changes nothing locally or on GitHub. Requires the GitHub CLI (gh), logged in.
 
 Options:
@@ -52,6 +52,7 @@ tickets=(.work/*/ticket.md)
 [[ ${#tickets[@]} -gt 0 ]] || { echo "No tickets in $main/.work/"; exit 0; }
 
 row() { printf '%-10s %-13s %-7s %-8s %-18s %-8s %s\n' "$@"; }
+merged_ids=()
 row TICKET STATUS PR STATE REVIEW CI "NEW FEEDBACK"
 for f in "${tickets[@]}"; do
   id=$(ea_ticket_field "$f" id)
@@ -95,7 +96,8 @@ for f in "${tickets[@]}"; do
       if [[ "$status" == "DONE" ]]; then
         echo "  → merged ($url)"
       else
-        echo "  → merged: set status DONE in ticket.md and clean up the worktree ($url)"
+        echo "  → merged: close the $id session, then run cleanup-ticket $id (removes worktree + local branch, sets DONE) ($url)"
+        merged_ids+=("$id")
       fi
       ;;
     CLOSED) echo "  → closed without merge: decide whether to cancel or reopen ($url)" ;;
@@ -118,3 +120,8 @@ for f in "${tickets[@]}"; do
       ;;
   esac
 done
+
+if [[ ${#merged_ids[@]} -gt 1 ]]; then
+  echo
+  echo "${#merged_ids[@]} merged tickets not cleaned up yet: cleanup-ticket --merged (preview with --dry-run)"
+fi

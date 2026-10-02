@@ -74,7 +74,7 @@ CANCELLED   set by the human; work stops
 | → `READY_FOR_PR` | Agent | Definition in `ticket/finish.md` met |
 | → `IN_REVIEW` | Agent or human | PR opened; or a PR feedback round finished (`ticket/pr-feedback.md`) |
 | `IN_REVIEW` → `IN_PROGRESS` | Agent | Human asked to address PR feedback that needs code changes |
-| → `DONE` | Human | PR merged |
+| → `DONE` | Human, or `scripts/cleanup-ticket` run by the human | PR merged; worktree and local branch removed |
 | → `BLOCKED` | Agent or human | See `AGENTS.md` §9 |
 | → `CANCELLED` | Human | Ticket abandoned |
 
