@@ -36,10 +36,38 @@ Possible checks: typecheck, lint, format check, unit tests, integration tests, b
 ## Run order
 
 1. Targeted tests for the files you changed (single file or name filter).
-2. Tests for the surrounding module or package.
-3. Full validation (`ticket/validate.md`): typecheck → lint → format check → tests → build, or the order CI uses.
+2. Validation (`ticket/validate.md`): typecheck → lint → format check → **affected tests** → build, or the order CI uses.
 
 Rerun any check after a code change; earlier results no longer count.
+
+## Affected tests locally, full suite in CI
+
+Standard practice, in three parts:
+
+1. **Locally — fast feedback:** run only the tests affected by the ticket's changes, plus whole-project typecheck, lint, and build.
+2. **CI — the gate:** the full suite runs on every PR and must pass before merge.
+3. **The author owns CI:** a failing check on the ticket's PR is feedback on the ticket, handled like a review comment (`ticket/pr-feedback.md`).
+
+Affected-only testing is safe only because of part 2. **If the repository has no CI configuration**, nothing runs the full suite later — run it locally.
+
+- **Affected** = tests that import the changed files, directly or indirectly, plus test files you changed. Use the runner's own support:
+
+  | Runner | Command |
+  |---|---|
+  | Vitest | `vitest related --run <changed source files>` |
+  | Jest | `jest --findRelatedTests <changed source files>` |
+  | pytest | test files for the changed modules (`tests/test_<module>.py`), or `pytest --testmon` if the project uses it |
+  | Go | `go test` for the changed packages and the packages that import them |
+  | Others | the narrowest test target the project defines for the changed area |
+
+- **Run the full suite instead** when:
+  - the change can affect any test: dependencies or lockfile, test runner configuration, test setup files, shared mocks or fixtures, `tsconfig`/build configuration;
+  - the runner cannot select affected tests faithfully — e.g. the project's test script sets env vars, wraps the runner, or passes config/project flags, which calling the runner directly would drop;
+  - the repository has no CI;
+  - the human or project rules ask for it (`tests-scope: full` in `.agent2793/validation`).
+- Affected selection follows imports. It misses tests that reach code through dynamic loading, registries, config, or the network — that is what the CI run is for.
+- Typecheck, lint, and build always cover the whole project; type errors and lint violations surface outside the changed files.
+- Report the scope honestly: "Tests: PASS (affected tests of 3 changed files)" and list the full suite under *Not verified* ("full test suite — runs in CI").
 
 ## Read results correctly
 

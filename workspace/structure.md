@@ -112,8 +112,14 @@ If automatic detection in `scripts/finish-ticket` does not fit a project, the pr
 # name: command      (run from the worktree root, in order)
 typecheck: pnpm -r typecheck
 lint: pnpm biome check .
-tests: pnpm vitest run
+tests: pnpm vitest related --run {files}
+tests-full: pnpm vitest run
 build: pnpm -r build
 ```
 
-When this file exists, it replaces automatic detection.
+| Line | Meaning |
+|---|---|
+| `name: command` | A check. If the file contains any checks, they replace automatic detection. |
+| `name: … {files} …` | `{files}` is replaced by the ticket's changed source files (affected tests). No changed source files → the check is N/A. |
+| `name-full: command` | Runs instead of the `{files}` line when the full suite is required (dependencies/test config changed, no CI, `--full-tests`, `tests-scope: full`). Without it, such a run is reported as not run. |
+| `tests-scope: full` | Always run the full test suite (default `affected`). Use it when the suite is fast or CI does not run it. Works with or without check lines. |

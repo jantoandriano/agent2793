@@ -18,24 +18,41 @@ TICKET-ID defaults to the ID in the current branch name.
 Options:
   --base REF        compare against REF instead of workspace.base in ticket.md
   --no-validate     skip running validation commands (result: not ready)
+  --full-tests      run the full test suite instead of only affected tests
   -h, --help        show this help
 
 Validation commands, in order of precedence:
-  .agent2793/validation in the repository  (lines "name: command")
+  .agent2793/validation in the repository  (lines "name: command"; see below)
   package.json scripts   typecheck, lint, format:check, test, build
   Makefile targets       typecheck, lint, test, build
   go.mod                 go vet ./..., go test ./..., go build ./...
   Cargo.toml             cargo test, cargo build
 
+Tests follow the standard practice: affected tests locally, full suite in CI.
+  - Affected tests run when the package.json test script is a plain vitest/jest call
+    (vitest related / jest --findRelatedTests on the changed source files).
+  - The full suite runs instead when: dependencies, test config, or tsconfig changed;
+    the test script has env vars, wrappers, or config/project flags; the repository
+    has no CI configuration (nothing else would run it); tests-scope is full; or
+    --full-tests is given.
+  - Typecheck, lint, and build always cover the whole project.
+
+.agent2793/validation lines:
+  name: command            a check (if any are present, they replace automatic detection)
+  name: cmd {files}        {files} = changed source files (affected tests)
+  name-full: command       used instead of the {files} line when the full suite is required
+  tests-scope: full        always run the full suite (default: affected)
+
 Exit status: 0 ready for PR, 2 not ready, 1 error.
 EOF
 }
 
-id="" base_opt="" validate=1
+id="" base_opt="" validate=1 full_tests=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base) base_opt=${2:?--base needs a value}; shift 2 ;;
     --no-validate) validate=0; shift ;;
+    --full-tests) full_tests=1; shift ;;
     -h | --help) usage; exit 0 ;;
     -*) ea_die "unknown option '$1' (see --help)" ;;
     *) [[ -z "$id" ]] || ea_die "unexpected argument '$1'"; id=$1; shift ;;
@@ -121,16 +138,117 @@ blocked_by=$(awk '/^[[:space:]]*blocked_by:/ { sub(/^[^:]*:[[:space:]]*/, ""); p
 names=() cmds=() results=() notes=()
 add_check() { names+=("$1"); cmds+=("$2"); results+=("${3:-}"); notes+=("${4:-}"); }
 
+# Files the ticket changed (existing ones), and the source files among them, for affected tests.
+changed_paths=()
+while IFS= read -r p; do
+  [[ -n "$p" ]] && changed_paths+=("$p")
+done < <(git diff --name-only --diff-filter=d "$merge_base" -- 2>/dev/null; printf '%s\n' "$untracked")
+code_files=()
+for p in "${changed_paths[@]}"; do
+  [[ "$p" =~ \.(m?[jt]sx?|c[jt]s|vue|svelte)$ ]] && code_files+=("$p")
+done
+files_q=$(printf '%q ' "${code_files[@]}")
+files_q=${files_q% }
+
+# Project settings and command overrides: .agent2793/validation ("name: command" lines).
+override=".agent2793/validation"
+override_value() { # value of "<key>:" in the override file, if any
+  [[ -f "$override" ]] || return 0
+  awk -v key="$1" '
+    $0 ~ "^[[:space:]]*" key "[[:space:]]*:" { sub("^[^:]*:[[:space:]]*", ""); sub("[[:space:]]+$", ""); print; exit }
+  ' "$override"
+}
+tests_scope=$(override_value tests-scope)
+case "${tests_scope:-affected}" in
+  affected | full) ;;
+  *) ea_die "$override: tests-scope must be 'affected' or 'full', got '$tests_scope'" ;;
+esac
+
+# CI is the gate that runs the full suite. Without CI configuration, nothing does: run it here.
+has_ci=0
+for p in .github/workflows/*.yml .github/workflows/*.yaml .gitlab-ci.yml azure-pipelines.yml \
+  .circleci/config.yml Jenkinsfile bitbucket-pipelines.yml .buildkite .drone.yml .travis.yml; do
+  if [[ -e "$p" ]]; then has_ci=1; break; fi
+done
+[[ $has_ci -eq 1 ]] || warnings+=("no CI configuration found — the full test suite ran locally because nothing else gates the PR")
+
+# When the full suite is required instead of affected tests, print why.
+full_trigger_re='(^|/)(package\.json|pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|tsconfig[^/]*\.json|(vite|vitest|jest)\.(config|setup|workspace)[^/]*|setupTests\.[cm]?[jt]sx?|babel\.config\.[^/]+|\.babelrc)$|(^|/)__mocks__/'
+full_suite_reason() {
+  local p
+  if [[ $full_tests -eq 1 ]]; then echo "--full-tests"; return; fi
+  if [[ "$tests_scope" == full ]]; then echo "project setting tests-scope: full"; return; fi
+  if [[ $has_ci -eq 0 ]]; then echo "no CI configuration found"; return; fi
+  for p in "${changed_paths[@]}"; do
+    if [[ "$p" =~ $full_trigger_re ]]; then echo "$p changed"; return; fi
+  done
+  if [[ ${#code_files[@]} -gt 200 ]]; then echo "${#code_files[@]} changed source files"; fi
+}
+full_reason=$(full_suite_reason)
+
+# Override checks. A command with {files} runs on the changed source files; when the full suite
+# is required, its "<name>-full:" line runs instead. Settings (tests-scope) and -full lines are
+# not checks themselves. If the file defines no checks, automatic detection is used.
+override_checks() {
+  [[ -f "$override" ]] || return 1
+  local line name cmd full_cmd found=1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line=${line%$'\r'}
+    [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+    name=$(sed 's/:.*//; s/[[:space:]]*$//; s/^[[:space:]]*//' <<<"$line")
+    cmd=$(sed 's/^[^:]*:[[:space:]]*//' <<<"$line")
+    [[ "$name" == tests-scope || "$name" == *-full ]] && continue
+    found=0
+    if [[ "$cmd" != *"{files}"* ]]; then
+      add_check "$name" "$cmd"
+    elif [[ -n "$full_reason" ]]; then
+      full_cmd=$(override_value "$name-full")
+      if [[ -n "$full_cmd" ]]; then
+        add_check "$name" "$full_cmd" "" "full suite ($full_reason)"
+      else
+        add_check "$name" "$cmd" "NOT RUN" "full suite required ($full_reason) but no '$name-full:' command in $override"
+      fi
+    elif [[ ${#code_files[@]} -eq 0 ]]; then
+      add_check "$name" "$cmd" "N/A" "no changed source files"
+    else
+      add_check "$name" "${cmd//"{files}"/"$files_q"}" "" "affected tests of ${#code_files[@]} changed file(s)"
+    fi
+  done <"$override"
+  return $found
+}
+
+# Affected-test command for a package.json test script, only when the script is a plain
+# vitest/jest invocation. Env vars, wrappers, or config/project flags change how tests run;
+# calling the runner directly would drop them, so those scripts get the full suite instead.
+affected_test_command() {
+  local body=$1 exec_prefix=$2 runner rest tok
+  read -r runner rest <<<"$body"
+  case "$runner" in
+    vitest)
+      [[ "$rest" == run || "$rest" == "run "* ]] && rest=${rest#run}
+      for tok in $rest; do
+        case "$tok" in
+          --run | --silent | --coverage | --no-coverage | --passWithNoTests | --reporter=* | --color | --no-color | --bail=*) ;;
+          *) return 1 ;;
+        esac
+      done
+      echo "$exec_prefix vitest related --run --passWithNoTests $files_q"
+      ;;
+    jest)
+      for tok in $rest; do
+        case "$tok" in
+          --ci | --silent | --coverage | --passWithNoTests | --runInBand | -i | --verbose | --watchAll=false | --bail | --color | --no-color) ;;
+          *) return 1 ;;
+        esac
+      done
+      echo "$exec_prefix jest --ci --findRelatedTests --passWithNoTests $files_q"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 detect_checks() {
-  local override=".agent2793/validation"
-  if [[ -f "$override" ]]; then
-    local line
-    while IFS= read -r line || [[ -n "$line" ]]; do
-      [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
-      add_check "$(sed 's/:.*//; s/[[:space:]]*$//' <<<"$line")" "$(sed 's/^[^:]*:[[:space:]]*//' <<<"$line")"
-    done <"$override"
-    return
-  fi
+  override_checks && return
 
   if [[ -f package.json ]]; then
     local pm=npm
@@ -141,11 +259,20 @@ detect_checks() {
       add_check "package.json" "-" "NOT RUN" "node not found"
       return
     fi
-    local scripts
-    scripts=$(node -e 'for (const k of Object.keys(require("./package.json").scripts || {})) console.log(k)')
-    local check candidates s found
+    local scripts_tsv scripts
+    scripts_tsv=$(node -e 'const s = require("./package.json").scripts || {}; for (const k of Object.keys(s)) console.log(k + "\t" + String(s[k]).replace(/[\t\n]/g, " "))')
+    scripts=$(cut -f1 <<<"$scripts_tsv")
+    local exec_prefix
+    case "$pm" in
+      pnpm) exec_prefix="pnpm exec" ;;
+      yarn) exec_prefix="yarn" ;;
+      bun) exec_prefix="bunx" ;;
+      *) exec_prefix="npx --no-install" ;;
+    esac
+    local check name candidates s found script_body
     for check in "typecheck:typecheck type-check check-types tsc" "lint:lint" \
       "format:format:check fmt:check prettier:check check-format" "tests:test test:unit" "build:build"; do
+      name=${check%%:*}
       candidates=${check#*:}
       found=""
       for s in $candidates; do
@@ -153,9 +280,24 @@ detect_checks() {
       done
       [[ -n "$found" ]] || continue
       if [[ ! -d node_modules ]]; then
-        add_check "${check%%:*}" "$pm run $found" "NOT RUN" "dependencies not installed (node_modules missing)"
+        add_check "$name" "$pm run $found" "NOT RUN" "dependencies not installed (node_modules missing)"
+        continue
+      fi
+      if [[ "$name" != tests ]]; then
+        add_check "$name" "$pm run $found"
+        continue
+      fi
+      # Tests: only those affected by the changed files, when that can be done faithfully.
+      script_body=$(awk -F'\t' -v k="$found" '$1 == k { print $2; exit }' <<<"$scripts_tsv")
+      local affected_cmd
+      if [[ -n "$full_reason" ]]; then
+        add_check tests "$pm run $found" "" "full suite ($full_reason)"
+      elif [[ ${#code_files[@]} -eq 0 ]]; then
+        add_check tests "-" "N/A" "no changed source files"
+      elif affected_cmd=$(affected_test_command "$script_body" "$exec_prefix"); then
+        add_check tests "$affected_cmd" "" "affected tests of ${#code_files[@]} changed file(s)"
       else
-        add_check "${check%%:*}" "$pm run $found"
+        add_check tests "$pm run $found" "" "full suite (\"$found\" script is not a plain vitest/jest call)"
       fi
     done
     for s in test:integration test:e2e e2e build-storybook storybook:build build:storybook; do
@@ -203,8 +345,14 @@ for i in "${!names[@]}"; do
   else
     results[i]="FAIL"
   fi
-  notes[i]="$((SECONDS - start))s, log: logs/$(basename "$log")"
+  notes[i]="${notes[i]:+${notes[i]}; }$((SECONDS - start))s, log: logs/$(basename "$log")"
   ran=$((ran + 1))
+done
+
+for i in "${!names[@]}"; do
+  if [[ "${results[$i]}" == "PASS" && "${notes[$i]}" == affected* ]]; then
+    warnings+=("${names[$i]}: only affected tests ran locally — the full suite runs in CI (or use --full-tests)")
+  fi
 done
 
 if [[ ${#names[@]} -eq 0 ]]; then

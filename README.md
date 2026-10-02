@@ -146,23 +146,27 @@ Everything is recorded in `.work/HYP-123/`: `ticket.md` (status), `analysis.md`,
 finish-ticket HYP-123
 ```
 
-Verifies git state, runs the validation it can detect, scans the diff for debug code, TODOs, and conflict markers, writes `validation.md`, and prints `READY_FOR_PR` or `NOT READY` with reasons. It never commits, pushes, or merges.
+Verifies git state, runs the validation it can detect (only the tests affected by the change — the full suite runs in CI; `--full-tests` to run it locally), scans the diff for debug code, TODOs, and conflict markers, writes `validation.md`, and prints `READY_FOR_PR` or `NOT READY` with reasons. It never commits, pushes, or merges.
 
 **6. Review** `.work/HYP-123/implementation-report.md` — it separates **Implemented**, **Verified**, **Not verified**, **Known issues**, and **Suggested follow-ups** — and the diff.
 
 **7. Open the PR** — yourself, or tell the agent in the ticket's session: "Open the PR for HYP-123". The agent commits, pushes only the ticket branch, opens the PR, records its link in `ticket.md`, and sets status `IN_REVIEW`. It never does this unprompted.
 
-**8. Handle review feedback** — agents are not notified when someone comments on the PR or requests changes. Check, then tell the right session:
+**8. Handle review feedback and CI** — agents are not notified when someone comments on the PR, requests changes, or CI fails. Check, then tell the right session:
 
 ```bash
 check-prs
 ```
 
 ```text
-TICKET     STATUS        PR      STATE    REVIEW             NEW FEEDBACK
-HYP-123    IN_REVIEW     #42     OPEN     CHANGES_REQUESTED  3 new since 2026-10-01T12:00:00Z
-  → in the HYP-123 session: "Address PR feedback for HYP-123"  (https://github.com/.../pull/42)
+TICKET     STATUS        PR      STATE    REVIEW             CI       NEW FEEDBACK
+HYP-123    IN_REVIEW     #42     OPEN     CHANGES_REQUESTED  failing  3 new since 2026-10-01T12:00:00Z
+  → in the HYP-123 session: "Address PR feedback for HYP-123" — CI failing: test  (https://github.com/.../pull/42)
+HYP-124    IN_REVIEW     #43     OPEN     APPROVED           passing  none
+  → approved, CI passing, no unhandled feedback: ready to merge (https://github.com/.../pull/43)
 ```
+
+Locally the agent runs only the tests affected by its change; CI runs the full suite. That is why a failing CI check counts as feedback on the ticket, handled like a review comment.
 
 In that ticket's session:
 
@@ -170,7 +174,7 @@ In that ticket's session:
 Address PR feedback for HYP-123.
 ```
 
-The agent fetches the reviews and comments, classifies each (required change, suggestion, question, disagreement, out of scope), asks you about disagreements, fixes the accepted items with the normal implement → validate → self-review loop, then pushes new commits and replies to each comment. By default it shows you the pushes and replies first; set `--pr-respond auto|ask|off` on `start-ticket` (or `EA_PR_RESPOND`) to change that. It never force-pushes, resolves threads, or merges. Each round is recorded in `.work/HYP-123/pr-feedback.md`; repeat for every new review.
+The agent fetches the reviews, comments, and failing CI checks, classifies each (required change, suggestion, question, disagreement, out of scope, CI failure), asks you about disagreements, fixes the accepted items with the normal implement → validate → self-review loop, then pushes new commits and replies to each comment. By default it shows you the pushes and replies first; set `--pr-respond auto|ask|off` on `start-ticket` (or `EA_PR_RESPOND`) to change that. It never force-pushes, resolves threads, or merges. Each round is recorded in `.work/HYP-123/pr-feedback.md`; repeat for every new review.
 
 `check-prs` needs the GitHub CLI (`gh`) logged in. Agent replies carry a hidden `<!-- agent2793 -->` marker so they are not counted as new feedback; your own comments are.
 
@@ -298,8 +302,8 @@ The agent uses exactly these. Safety rules — never touch another ticket's work
 |---|---|
 | `create-worktree <ID>` | Creates or reuses branch `<prefix>/<ID>` and worktree `../worktrees/<ID>`; refuses if the branch is checked out elsewhere |
 | `start-ticket <ID>` | `create-worktree` + `.work/<ID>/ticket.md` + git exclude + copies files listed in `.work/local-files` + list of other active tickets + what to open |
-| `finish-ticket [ID]` | Git checks, detected validation, diff scan, `validation.md`, report draft, readiness verdict (exit 0 ready, 2 not ready) |
-| `check-prs [--all]` | For each ticket: its PR, review decision, and count of review feedback not yet handled; says which session to tell what. Read-only; needs `gh` |
+| `finish-ticket [ID]` | Git checks, detected validation (affected tests only, unless deps/test config changed or `--full-tests`), diff scan, `validation.md`, report draft, readiness verdict (exit 0 ready, 2 not ready) |
+| `check-prs [--all]` | For each ticket: its PR, review decision, CI status, and count of review feedback not yet handled; says which session to tell what. Read-only; needs `gh` |
 
 All support `--help`. Bash; on Windows run them from Git Bash or WSL. They never commit, push, merge, or touch other tickets' worktrees.
 

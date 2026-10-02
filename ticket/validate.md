@@ -27,7 +27,9 @@ Mark each as available / not applicable. Prefer exactly what CI runs.
 
 Set `ticket.status: VALIDATING`. Run every applicable check in the worktree, in CI order (default: typecheck → lint → format → tests → build). Run tests in non-watch mode.
 
-`scripts/finish-ticket` runs the common checks it can detect and writes `validation.md`; you may use it, but you are still responsible for checks it does not cover (integration, e2e, storybook, project-specific).
+Tests: run only the tests **affected** by the ticket's changed files; the full suite runs in CI on the PR. Run the full suite locally instead when the change touches dependencies, test configuration, setup, shared fixtures, or build configuration, when the test script cannot be narrowed faithfully, or when the repository has no CI (`rules/testing.md`, "Affected tests locally, full suite in CI"). Typecheck, lint, and build cover the whole project.
+
+`scripts/finish-ticket` runs the common checks it can detect and writes `validation.md`, including affected-test selection for Vitest and Jest (`--full-tests` forces the full suite). You are still responsible for checks it does not cover (integration, e2e, storybook, project-specific).
 
 Checks that need unavailable infrastructure (database, browser, credentials) are *not verified*, with the reason — never *passed*.
 
@@ -53,7 +55,7 @@ Write `validation.md`:
 |---|---|---|---|
 | typecheck | `pnpm typecheck` | PASS | |
 | lint | `pnpm lint` | PASS | |
-| tests | `pnpm test` | PASS | 214 tests, 6 new |
+| tests | `pnpm vitest related --run src/invoices/export.ts` | PASS | affected tests of 1 changed file: 18 tests, 6 new; full suite runs in CI |
 | build | `pnpm build` | PASS | |
 | e2e | `pnpm test:e2e` | NOT RUN | needs browser runtime |
 

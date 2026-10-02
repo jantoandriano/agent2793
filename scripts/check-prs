@@ -8,14 +8,15 @@ usage() {
 Usage: check-prs [--all]
 
 For every ticket in .work/ (skipping DONE and CANCELLED unless --all), finds the
-pull request for its branch and counts review feedback newer than
-pr.feedback_handled_at in ticket.md:
+pull request for its branch, shows its CI status (passing / failing / pending / none),
+and counts review feedback newer than pr.feedback_handled_at in ticket.md:
   - reviews with a body, and every "changes requested" review
   - conversation comments
   - inline review comments
 Agent replies (containing <!-- agent2793 -->) are not counted.
 
-Then says what to do: address feedback in the ticket's session, wait, or clean up.
+Then says what to do: address feedback (new reviews or failing CI) in the ticket's
+session, wait, merge, or clean up.
 Read-only: changes nothing locally or on GitHub. Requires the GitHub CLI (gh), logged in.
 
 Options:
@@ -43,12 +44,15 @@ marker='<!-- agent2793 -->'
 not_agent="(.body // \"\" | contains(\"$marker\") | not)"
 reviews_jq="(.reviews[] | select(.state != \"PENDING\") | select((.body // \"\") != \"\" or .state == \"CHANGES_REQUESTED\") | select($not_agent) | .submittedAt), (.comments[] | select($not_agent) | .createdAt)"
 inline_jq=".[] | select($not_agent) | .created_at"
+# CI: overall state of the PR's checks (passing | failing | pending | none) and names of failing checks.
+ci_jq='[.statusCheckRollup[]? | {name: (.name // .context // "check"), r: (if .__typename == "StatusContext" then (if .state == "SUCCESS" then "pass" elif (.state == "PENDING" or .state == "EXPECTED") then "pending" else "fail" end) else (if .status != "COMPLETED" then "pending" elif (.conclusion == "SUCCESS" or .conclusion == "NEUTRAL" or .conclusion == "SKIPPED") then "pass" else "fail" end) end)}] | [(if length == 0 then "none" elif any(.[]; .r == "fail") then "failing" elif any(.[]; .r == "pending") then "pending" else "passing" end), ([.[] | select(.r == "fail") | .name] | join(", "))] | @tsv'
 
 shopt -s nullglob
 tickets=(.work/*/ticket.md)
 [[ ${#tickets[@]} -gt 0 ]] || { echo "No tickets in $main/.work/"; exit 0; }
 
-printf '%-10s %-13s %-7s %-8s %-18s %s\n' TICKET STATUS PR STATE REVIEW "NEW FEEDBACK"
+row() { printf '%-10s %-13s %-7s %-8s %-18s %-8s %s\n' "$@"; }
+row TICKET STATUS PR STATE REVIEW CI "NEW FEEDBACK"
 for f in "${tickets[@]}"; do
   id=$(ea_ticket_field "$f" id)
   status=$(ea_ticket_field "$f" status)
@@ -59,11 +63,14 @@ for f in "${tickets[@]}"; do
   pr=$(gh pr list --head "$branch" --state all --limit 1 --json number,url,state,reviewDecision \
     --jq '.[0] // empty | [.number, .url, .state, (.reviewDecision // "-")] | @tsv' 2>/dev/null)
   if [[ -z "$pr" ]]; then
-    printf '%-10s %-13s %-7s %-8s %-18s %s\n' "$id" "$status" - - - -
+    row "$id" "$status" - - - - -
     echo "  → no PR for $branch"
     continue
   fi
   IFS=$'\t' read -r number url state decision <<<"$pr"
+
+  ci_line=$(gh pr view "$number" --json statusCheckRollup --jq "$ci_jq" 2>/dev/null)
+  IFS=$'\t' read -r ci ci_failed <<<"${ci_line:-unknown}"
 
   times=$(
     gh pr view "$number" --json reviews,comments --jq "$reviews_jq" 2>/dev/null
@@ -81,7 +88,7 @@ for f in "${tickets[@]}"; do
   else
     feedback="none"
   fi
-  printf '%-10s %-13s %-7s %-8s %-18s %s\n' "$id" "$status" "#$number" "$state" "$decision" "$feedback"
+  row "$id" "$status" "#$number" "$state" "$decision" "$ci" "$feedback"
 
   case "$state" in
     MERGED)
@@ -93,10 +100,18 @@ for f in "${tickets[@]}"; do
       ;;
     CLOSED) echo "  → closed without merge: decide whether to cancel or reopen ($url)" ;;
     *)
-      if [[ $new -gt 0 ]]; then
-        echo "  → in the $id session: \"Address PR feedback for $id\"  ($url)"
+      if [[ $new -gt 0 || "$ci" == failing ]]; then
+        reason=""
+        [[ "$ci" == failing ]] && reason=" — CI failing: ${ci_failed:-see PR checks}"
+        echo "  → in the $id session: \"Address PR feedback for $id\"${reason}  ($url)"
+      elif [[ "$ci" == pending ]]; then
+        echo "  → CI running; check again when it finishes ($url)"
       elif [[ "$decision" == "APPROVED" ]]; then
-        echo "  → approved, no unhandled feedback: ready to merge ($url)"
+        if [[ "$ci" == none ]]; then
+          echo "  → approved, but the PR has no CI checks: make sure the full test suite ran before merging ($url)"
+        else
+          echo "  → approved, CI passing, no unhandled feedback: ready to merge ($url)"
+        fi
       else
         echo "  → waiting for review ($url)"
       fi
