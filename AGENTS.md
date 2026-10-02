@@ -25,7 +25,7 @@ When the human asks to start a ticket ("start ticket HYP-123", "start HYP-123 wi
    bash <EA_HOME>/scripts/start-ticket <ID> --title "<title>" [--type feature|bug|refactor|investigation|chore] [--base <branch>]
    ```
 
-   It creates the branch, the worktree `../worktrees/<ID>`, and `.work/<ID>/ticket.md`. It works from any worktree of the project, including the main checkout and another ticket's worktree. If the ticket already has a worktree, the script reuses it: report that path, do not create a second one.
+   It creates the branch, the worktree `../worktrees/<ID>`, and `.work/<ID>/ticket.md`. It works from any worktree of the project, including the main checkout and another ticket's worktree. If the ticket already has a worktree, the script reuses it: report that path, do not create a second one. `<ID>` is the ticket ID; a full branch or Jira branch name (e.g. `feature/HYPCRE-7314-add-csv-export`) is also accepted and reduced to the ticket ID.
 2. Do not create the branch or worktree by hand, do not `git checkout` / `git switch` the current folder to the ticket branch, and do not edit any code in the current folder for this ticket.
 3. Report the branch and worktree path. Tell the human to start a session **in that worktree** (Kilo: Agent Manager → import the existing worktree) and to send `Implement ticket <ID>. Follow the agent2793 workflow.` there.
 

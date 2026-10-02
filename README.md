@@ -108,6 +108,8 @@ start-ticket HYP-123 --title "Add CSV export"     # --type bug|refactor|investig
 
 This creates branch `feature/HYP-123`, worktree `D:/Projects/worktrees/HYP-123`, and ticket context `.work/HYP-123/ticket.md`, copies the files listed in `.work/local-files`, and lists other active tickets.
 
+The ticket argument is the ticket ID (`HYP-123`). You can also paste a full branch or Jira branch name (e.g. `feature/HYPCRE-7314-add-csv-export`): only the ticket ID (`HYPCRE-7314`) is used for the branch, worktree, and context.
+
 **2. Start a Kilo session in the worktree**
 
 In your existing VS Code window, open Kilo's **Agent Manager** and import the existing worktree `D:/Projects/worktrees/HYP-123` (`start-ticket` already created it). This creates a session that works inside that worktree. No new window needed; each ticket becomes one session in the Agent Manager panel.
@@ -307,8 +309,8 @@ The agent uses exactly these. Safety rules — never touch another ticket's work
 
 | Script | Does |
 |---|---|
-| `create-worktree <ID>` | Creates or reuses branch `<prefix>/<ID>` and worktree `../worktrees/<ID>`; refuses if the branch is checked out elsewhere |
-| `start-ticket <ID>` | `create-worktree` + `.work/<ID>/ticket.md` + git exclude + copies files listed in `.work/local-files` + list of other active tickets + what to open |
+| `create-worktree <ID>` | Creates or reuses branch `<prefix>/<ID>` and worktree `../worktrees/<ID>`; refuses if the branch is checked out elsewhere. `<ID>` may be a full branch or Jira branch name; only the ticket ID is used |
+| `start-ticket <ID>` | `create-worktree` + `.work/<ID>/ticket.md` + git exclude + copies files listed in `.work/local-files` + list of other active tickets + what to open. `<ID>` may be a full branch or Jira branch name; only the ticket ID is used |
 | `finish-ticket [ID]` | Git checks, detected validation (affected tests only, unless deps/test config changed or `--full-tests`), diff scan, `validation.md`, report draft, readiness verdict (exit 0 ready, 2 not ready) |
 | `check-prs [--all]` | For each ticket: its PR, review decision, CI status, and count of review feedback not yet handled; says which session to tell what. Read-only; needs `gh` |
 | `cleanup-ticket <ID>... \| --merged` | For tickets whose PR is merged: removes the worktree folder and local branch, sets `DONE`, keeps `.work/<ID>/`. Skips (with the reason) anything unmerged, with uncommitted changes, or with local commits not in the PR. `--dry-run`, `--force` |

@@ -116,7 +116,7 @@ The human says something like "Start ticket HYP-123 'Add CSV export' with agent2
    bash <EA_HOME>/scripts/start-ticket <ID> --title "<title>" [--type feature|bug|refactor|investigation|chore] [--base <branch>]
    ```
 
-   Infer `--type` from the human's description when obvious (bug report → `bug`); otherwise use the default. Use `--base <other ticket branch>` only if the human says the ticket builds on another ticket.
+   Infer `--type` from the human's description when obvious (bug report → `bug`); otherwise use the default. Use `--base <other ticket branch>` only if the human says the ticket builds on another ticket. `<ID>` is the ticket ID (e.g. `HYPCRE-7314`); a full branch or Jira branch name (e.g. `feature/HYPCRE-7314-add-csv-export`) is also accepted and reduced to the ticket ID.
 3. Report the branch, worktree path, and context path from the script output.
 4. Tell the human how to start the ticket's agent session **in the worktree folder**:
 

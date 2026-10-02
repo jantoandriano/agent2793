@@ -7,6 +7,9 @@ usage() {
   cat <<'EOF'
 Usage: start-ticket <TICKET-ID> [options]
 
+<TICKET-ID> may be a full branch or ticket name (e.g. a Jira branch like
+feature/HYPCRE-7314-add-csv-export); only the ticket ID (HYPCRE-7314) is used.
+
   1. creates branch <prefix>/<TICKET-ID>          (via create-worktree)
   2. creates worktree ../worktrees/<TICKET-ID>    (via create-worktree)
   3. creates context directory .work/<TICKET-ID>/ in the main worktree
@@ -61,8 +64,11 @@ case "$pr_respond" in
   *) ea_die "invalid --pr-respond '$pr_respond' (ask | auto | off)" ;;
 esac
 
+raw_id=$id
+id=$(ea_normalize_ticket_id "$id") ||
+  ea_die "no ticket id in '$raw_id' (expected e.g. HYP-123, or a branch like feature/HYP-123-add-export)"
+
 ea_require_git_repo
-ea_validate_ticket_id "$id"
 main=$(ea_main_worktree)
 
 [[ -n "$branch" ]] || branch="$(ea_branch_prefix "$type")/$id"

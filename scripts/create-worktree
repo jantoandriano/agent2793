@@ -10,6 +10,9 @@ Usage: create-worktree <TICKET-ID> [options]
 Creates branch <prefix>/<TICKET-ID> and worktree ../worktrees/<TICKET-ID>
 next to the main worktree. Reuses them if they already exist for this ticket.
 
+<TICKET-ID> may be a full branch or ticket name (e.g. a Jira branch like
+feature/HYPCRE-7314-add-csv-export); only the ticket ID (HYPCRE-7314) is used.
+
 Options:
   --type TYPE     feature | bug | refactor | investigation | chore  (default: feature)
   --base REF      start point for a new branch (default: origin/HEAD, main, master, develop)
@@ -35,8 +38,11 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "$id" ]] || { usage >&2; exit 1; }
 
+raw_id=$id
+id=$(ea_normalize_ticket_id "$id") ||
+  ea_die "no ticket id in '$raw_id' (expected e.g. HYP-123, or a branch like feature/HYP-123-add-export)"
+
 ea_require_git_repo
-ea_validate_ticket_id "$id"
 main=$(ea_main_worktree)
 
 [[ -n "$branch" ]] || branch="$(ea_branch_prefix "$type")/$id"

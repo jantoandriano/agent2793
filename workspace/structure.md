@@ -12,7 +12,7 @@ Reference for paths, file formats, and who may write what. Concepts: `workspace/
 | Context directory | `<main worktree>/.work/<TICKET-ID>/` | — |
 | Engineering Agent root | Where this repository is cloned (recommended `~/.engineering-agent`) | — |
 
-Ticket IDs match `^[A-Za-z][A-Za-z0-9_]*-[0-9]+$` (e.g. `HYP-123`). If several repositories share a parent directory and ticket IDs can repeat across them, set `EA_WORKTREE_ROOT` per repository (e.g. `../worktrees/my-app`).
+Ticket IDs match `^[A-Za-z][A-Za-z0-9_]*-[0-9]+$` (e.g. `HYP-123`). `start-ticket` and `create-worktree` also accept a full branch or Jira branch name (e.g. `feature/HYPCRE-7314-add-csv-export`) and use only the ticket ID (`HYPCRE-7314`) for the branch, worktree, and context. If several repositories share a parent directory and ticket IDs can repeat across them, set `EA_WORKTREE_ROOT` per repository (e.g. `../worktrees/my-app`).
 
 Finding the context directory from inside a ticket worktree:
 

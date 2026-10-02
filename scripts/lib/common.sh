@@ -24,6 +24,19 @@ ea_validate_ticket_id() {
   [[ "$1" =~ ^[A-Za-z][A-Za-z0-9_]*-[0-9]+$ ]] || ea_die "invalid ticket id '$1' (expected e.g. HYP-123)"
 }
 
+# Canonical ticket ID (e.g. HYPCRE-7314) from a bare ID or a Jira-style branch/name that starts with
+# one, such as "feature/HYPCRE-7314-add-csv-export". Returns 1 when no ID is found.
+ea_normalize_ticket_id() {
+  local ref=$1 segment=${1##*/}
+  if [[ "$ref" =~ ^[A-Za-z][A-Za-z0-9_]*-[0-9]+$ ]]; then
+    printf '%s\n' "$ref"
+  elif [[ "$segment" =~ ^([A-Za-z][A-Za-z0-9_]*-[0-9]+)($|[-_]) ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+  else
+    return 1
+  fi
+}
+
 # Extract a ticket ID (e.g. HYP-123) from a branch name like feature/HYP-123.
 ea_ticket_id_from_branch() {
   [[ "$1" =~ ([A-Za-z][A-Za-z0-9_]*-[0-9]+) ]] || return 1
