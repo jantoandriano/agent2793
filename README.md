@@ -46,13 +46,13 @@ Set up agent2793 in this project by following D:/Projects/agent2793/SETUP.md (se
 
 The agent creates or merges `.kilo/kilo.jsonc`, adds `.work/local-files`, keeps both out of git, and reports what it changed. It reuses the project's existing AI instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, ...) by adding them to `instructions` — it does not create new ones — and only reports which validation commands `finish-ticket` would run. No committed file is changed. Reload the window afterwards so the instructions load.
 
-To start a ticket from chat (in the main checkout):
+To start a ticket from chat (in any session of the project, after setup):
 
 ```text
-Start ticket HYP-123 "Add CSV export" with agent2793 (D:/Projects/agent2793/SETUP.md, section B).
+Start ticket HYP-123 "Add CSV export" with agent2793
 ```
 
-The agent runs `start-ticket` and tells you the worktree path; you then start a Kilo session in that worktree and give it the ticket (steps 2–3 below). To check readiness: `Check if ticket HYP-123 is ready (D:/Projects/agent2793/SETUP.md, section C).` To see which PRs have new review feedback: `Check my PRs (D:/Projects/agent2793/SETUP.md, section D).`
+Every "start ticket" creates a new worktree for that ticket. The rule is in `AGENTS.md`, which the agent loads in every session, so no SETUP.md reference is needed. The agent never edits the current folder for the ticket. It runs `start-ticket` and tells you the worktree path (if the ticket already has a worktree, it reuses that one). You then start a Kilo session in that worktree and give it the ticket (steps 2–3 below). To check readiness: `Check if ticket HYP-123 is ready (D:/Projects/agent2793/SETUP.md, section C).` To see which PRs have new review feedback: `Check my PRs (D:/Projects/agent2793/SETUP.md, section D).`
 
 [`SETUP.md`](SETUP.md) holds the agent's instructions for all three.
 

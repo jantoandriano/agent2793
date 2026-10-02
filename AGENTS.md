@@ -15,6 +15,22 @@ This repository (the **Engineering Agent root**, `EA_HOME`) defines how you work
 
 Paths in these documents are relative to `EA_HOME` unless stated otherwise. The path to `EA_HOME` is recorded in the ticket context (`ticket.md` → `workspace.engineering_agent`) or in your tool's installed instructions.
 
+### "Start ticket" always creates the ticket's worktree
+
+When the human asks to start a ticket ("start ticket HYP-123", "start HYP-123 with agent2793", "work on / pick up HYP-123", or "implement HYP-123") and the current folder is **not** that ticket's worktree:
+
+1. Run `scripts/start-ticket` with bash (Windows: Git Bash; full instructions in `SETUP.md` §B):
+
+   ```bash
+   bash <EA_HOME>/scripts/start-ticket <ID> --title "<title>" [--type feature|bug|refactor|investigation|chore] [--base <branch>]
+   ```
+
+   It creates the branch, the worktree `../worktrees/<ID>`, and `.work/<ID>/ticket.md`. It works from any worktree of the project, including the main checkout and another ticket's worktree. If the ticket already has a worktree, the script reuses it: report that path, do not create a second one.
+2. Do not create the branch or worktree by hand, do not `git checkout` / `git switch` the current folder to the ticket branch, and do not edit any code in the current folder for this ticket.
+3. Report the branch and worktree path. Tell the human to start a session **in that worktree** (Kilo: Agent Manager → import the existing worktree) and to send `Implement ticket <ID>. Follow the agent2793 workflow.` there.
+
+If the script fails, report its error and stop; do not fall back to working in the current folder. When the current folder already is the ticket's worktree (`git branch --show-current` equals `workspace.branch` in its `ticket.md`), skip this and execute the ticket (section 6).
+
 ## 2. Loading rules
 
 Always load:
@@ -89,7 +105,7 @@ git status                  # record pre-existing changes; do not mix them into 
 git worktree list           # your worktree is listed; note other active tickets
 ```
 
-If the branch does not match the ticket, you are in the main worktree when a ticket worktree exists, or the status shows changes you cannot explain: **stop and ask.**
+If the ticket has no worktree yet, create it first (section 1, "Start ticket"). If the branch does not match the ticket, you are in the main worktree when a ticket worktree exists, or the status shows changes you cannot explain: **stop and ask.**
 
 ## 6. Executing a ticket
 

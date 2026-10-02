@@ -107,9 +107,9 @@ Note: reload the editor window (or restart the agent session) so the new instruc
 
 ## B. Start a ticket
 
-The human says something like "Start ticket HYP-123 'Add CSV export' with agent2793".
+The human says something like "Start ticket HYP-123 'Add CSV export' with agent2793". Every ticket gets its own worktree; never start one by editing in the current folder (`AGENTS.md` §1, "Start ticket").
 
-1. Confirm you are in the project's main worktree (step A1). If `.work/local-files` does not exist, run section A first, or ask.
+1. Run from any worktree of the project (the main checkout or another ticket's worktree); the script always places the new worktree next to the main one. If `.work/local-files` does not exist in the main worktree, the tool config will not be copied: mention it and offer section A after the ticket is started.
 2. Run the script with bash (on Windows, Git Bash: `bash` if on PATH, otherwise `"C:/Program Files/Git/bin/bash.exe"`):
 
    ```bash
